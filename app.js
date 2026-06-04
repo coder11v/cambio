@@ -32,6 +32,16 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error("Error loading assets/config.json version:", err);
         });
 
+    // Parse URL query parameter ?room=XXXX
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedRoomCode = urlParams.get('room');
+    if (sharedRoomCode && sharedRoomCode.length === 4) {
+        localStorage.setItem('pendingRoomCode', sharedRoomCode.toUpperCase());
+        // Clean URL parameter
+        const newUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+    }
+
     // UI Elements
     const loadingEl = document.getElementById("loading");
     const authSection = document.getElementById("auth-section");
@@ -42,6 +52,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const signoutBtn = document.getElementById("signout-btn");
     const lobbyUsernameDisplay = document.getElementById("lobby-username-display");
     const authErrorEl = document.getElementById("auth-error");
+
+    const adminSection = document.getElementById("admin-section");
+    const adminSignoutBtn = document.getElementById("admin-signout-btn");
+    const adminRoomsList = document.getElementById("admin-rooms-list");
+    const adminEndedOverlay = document.getElementById("admin-ended-overlay");
+    const adminEndedCloseBtn = document.getElementById("admin-ended-close-btn");
 
     const lobbySection = document.getElementById("lobby-section");
     const waitingRoomSection = document.getElementById("waiting-room-section");
@@ -109,6 +125,56 @@ document.addEventListener("DOMContentLoaded", () => {
                     authSection.style.display = "none";
                     lobbyUsernameDisplay.innerText = currentUsername;
 
+                    if (currentUsername === "veeradmin") {
+                        loadAdminDashboard();
+                        return;
+                    }
+
+                    // Read pending room code from sharing link
+                    const pendingRoom = localStorage.getItem('pendingRoomCode');
+
+                    const autoJoinRoom = async (code) => {
+                        try {
+                            const targetRoomRef = window.firebaseDb.ref(db, `rooms/${code}`);
+                            const snap = await window.firebaseDb.get(targetRoomRef);
+
+                            if (!snap.exists()) {
+                                alert(`Room ${code} not found!`);
+                                lobbySection.style.display = "block";
+                                return;
+                            }
+
+                            const roomData = snap.val();
+                            if (roomData.status !== "waiting") {
+                                alert("Game already in progress!");
+                                lobbySection.style.display = "block";
+                                return;
+                            }
+
+                            const currentPlayers = Object.keys(roomData.players || {}).length;
+                            if (currentPlayers >= 8) {
+                                alert("Room is full! (Max 8 players)");
+                                lobbySection.style.display = "block";
+                                return;
+                            }
+
+                            currentRoomCode = code;
+                            roomRef = targetRoomRef;
+
+                            // Add player to room
+                            await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), {
+                                name: currentUsername,
+                                order: currentPlayers,
+                                isHost: false
+                            });
+
+                            enterWaitingRoom();
+                        } catch (err) {
+                            console.error("Auto join error:", err);
+                            lobbySection.style.display = "block";
+                        }
+                    };
+
                     // Query the database to see which rooms this player is currently in
                     const checkUserRooms = async () => {
                         try {
@@ -129,6 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             document.getElementById("multiple-rooms-section").style.display = "none";
                             waitingRoomSection.style.display = "none";
                             gameBoardSection.style.display = "none";
+                            adminSection.style.display = "none";
 
                             if (activeRooms.length === 1) {
                                 // Rejoin the single active room
@@ -187,7 +254,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
                                 multiSection.style.display = "block";
                             } else {
-                                lobbySection.style.display = "block";
+                                if (pendingRoom) {
+                                    localStorage.removeItem('pendingRoomCode');
+                                    await autoJoinRoom(pendingRoom);
+                                } else {
+                                    lobbySection.style.display = "block";
+                                }
                             }
                         } catch (err) {
                             console.error("Auto-rejoin query error:", err);
@@ -245,6 +317,30 @@ document.addEventListener("DOMContentLoaded", () => {
             signoutBtn.addEventListener("click", () => {
                 window.firebaseAuth.signOut(auth)
                     .catch(err => console.error("Signout Error:", err));
+            });
+
+            adminSignoutBtn.addEventListener("click", () => {
+                window.firebaseAuth.signOut(auth)
+                    .catch(err => console.error("Signout Error:", err));
+            });
+
+            adminEndedCloseBtn.addEventListener("click", async () => {
+                adminEndedOverlay.classList.add("hidden");
+                try {
+                    if (currentRoomCode) {
+                        if (isHost) {
+                            await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${currentRoomCode}`), null);
+                        } else {
+                            await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), null);
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error cleaning up room on admin end:", err);
+                }
+                currentRoomCode = null;
+                roomRef = null;
+                isHost = false;
+                location.reload();
             });
         })
         .catch(error => {
@@ -332,6 +428,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             localGameState = data;
             isHost = (data.host === currentUser.uid);
+
+            if (data.status === "ended_by_admin") {
+                adminEndedOverlay.classList.remove("hidden");
+                if (simulationInterval) {
+                    clearInterval(simulationInterval);
+                    simulationInterval = null;
+                }
+                return;
+            }
 
             // Update player list
             playersList.innerHTML = "";
@@ -1211,4 +1316,73 @@ document.addEventListener("DOMContentLoaded", () => {
             turnOrder: playerIds.sort((a, b) => players[a].order - players[b].order) // array of UIDs in order
         });
     });
+
+    let adminRoomsListener = null;
+
+    function loadAdminDashboard() {
+        lobbySection.style.display = "none";
+        waitingRoomSection.style.display = "none";
+        gameBoardSection.style.display = "none";
+        document.getElementById("multiple-rooms-section").style.display = "none";
+        adminSection.style.display = "block";
+
+        if (adminRoomsListener) {
+            // Off the listener if already exists to prevent leaks
+            adminRoomsListener = null;
+        }
+
+        const roomsRef = window.firebaseDb.ref(db, 'rooms');
+        window.firebaseDb.onValue(roomsRef, (snapshot) => {
+            const rooms = snapshot.val() || {};
+            adminRoomsList.innerHTML = "";
+
+            const codes = Object.keys(rooms);
+            const activeCodes = codes.filter(code => rooms[code] && rooms[code].status !== "ended_by_admin");
+            if (activeCodes.length === 0) {
+                adminRoomsList.innerHTML = "<p style='color: #a0aec0; text-align: center;'>No active room sessions.</p>";
+                return;
+            }
+
+            activeCodes.forEach(code => {
+                const room = rooms[code];
+                const item = document.createElement("div");
+                item.className = "admin-room-item";
+
+                const info = document.createElement("div");
+                info.className = "admin-room-info";
+                
+                const hostName = room.players && room.host && room.players[room.host] ? room.players[room.host].name : "Unknown";
+                const pCount = room.players ? Object.keys(room.players).length : 0;
+                const pNames = room.players ? Object.values(room.players).map(p => p.name).join(', ') : "None";
+
+                info.innerHTML = `
+                    <strong>Room Code: ${code}</strong> | Status: ${room.status}<br>
+                    <span class="admin-room-players" style="font-size: 0.8em; color: #a0aec0;">Host: ${hostName} | Players (${pCount}): ${pNames}</span>
+                `;
+                item.appendChild(info);
+
+                const actionBtn = document.createElement("button");
+                actionBtn.innerText = "End Session";
+                actionBtn.style.backgroundColor = "#e74c3c";
+                actionBtn.style.borderColor = "#e74c3c";
+                actionBtn.style.padding = "4px 8px";
+                actionBtn.style.fontSize = "0.85em";
+
+                actionBtn.onclick = async () => {
+                    actionBtn.disabled = true;
+                    try {
+                        await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${code}`), {
+                            status: "ended_by_admin"
+                        });
+                    } catch (err) {
+                        console.error("Error ending session:", err);
+                        actionBtn.disabled = false;
+                    }
+                };
+
+                item.appendChild(actionBtn);
+                adminRoomsList.appendChild(item);
+            });
+        });
+    }
 });

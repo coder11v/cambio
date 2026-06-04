@@ -69,6 +69,18 @@
             </div>
         </div>
 
+        <!-- Admin Section -->
+        <div id="admin-section" style="display: none;">
+            <div class="lobby-box" style="max-width: 600px;">
+                <h2 style="color: #ecc94b; margin-bottom: 10px;">Admin Dashboard</h2>
+                <button id="admin-signout-btn" style="background-color: #e74c3c; border-color: #e74c3c; padding: 4px 8px; font-size: 0.85em; margin-bottom: 15px;">Sign Out</button>
+                <h3>Active Room Sessions</h3>
+                <div id="admin-rooms-list" style="margin-top: 15px; text-align: left;">
+                    <!-- Active rooms go here -->
+                </div>
+            </div>
+        </div>
+
         <!-- Waiting Room Section -->
         <div id="waiting-room-section" style="display: none;">
             <h2>Room Code: <span id="display-room-code"></span></h2>
@@ -189,6 +201,15 @@
                             and scores are compared.</li>
                     </ol>
                 </div>
+            </div>
+        </div>
+
+        <!-- Admin Ended Overlay -->
+        <div id="admin-ended-overlay" class="modal hidden">
+            <div class="modal-content" style="text-align: center; max-width: 400px; margin: auto;">
+                <h2 style="color: #ff6b6b; margin-bottom: 15px;">Session Terminated</h2>
+                <p style="color: #cbd5e0; margin-bottom: 20px;">This game session was ended by the administrator.</p>
+                <button id="admin-ended-close-btn">Back to Lobby</button>
             </div>
         </div>
 

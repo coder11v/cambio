@@ -490,3 +490,32 @@ li {
     color: #4a5568;
     border-top: 2px solid #2d3748;
 }
+
+/* Admin Panel Styles */
+#admin-rooms-list {
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.admin-room-item {
+    background-color: #2d3748;
+    border: 1px solid #4a5568;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.admin-room-info {
+    font-size: 0.9em;
+    color: #cbd5e0;
+}
+
+.admin-room-players {
+    font-size: 0.8em;
+    color: #a0aec0;
+    margin-top: 2px;
+}

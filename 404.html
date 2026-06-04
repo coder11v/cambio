@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script type="text/javascript">
+        // Extract the last path component (e.g. "XVRC")
+        const pathSegments = window.location.pathname.split('/').filter(Boolean);
+        const lastSegment = pathSegments[pathSegments.length - 1];
+
+        if (lastSegment && lastSegment.length === 4 && /^[A-Z0-9]+$/i.test(lastSegment)) {
+            // Reconstruct path and redirect to home with ?room=XXXX
+            // For example: /cambio/XVRC -> /cambio/?room=XVRC
+            const newPath = '/' + pathSegments.slice(0, -1).join('/') + '/?room=' + lastSegment.toUpperCase();
+            window.location.replace(window.location.origin + newPath.replace(/\/+/g, '/'));
+        } else {
+            // Redirect to home page
+            const newPath = '/' + pathSegments.join('/') + '/';
+            window.location.replace(window.location.origin + newPath.replace(/\/+/g, '/'));
+        }
+    </script>
+</head>
+<body>
+    Redirecting...
+</body>
+</html>
