@@ -259,18 +259,14 @@ li {
 }
 
 .card-back {
-    background-color: #2b6cb0;
+    background-image: url('assets/card.svg');
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
     width: 100%;
     height: 100%;
     border-radius: 2px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: #ffffff;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    border: 2px solid #ffffff;
+    color: transparent;
 }
 
 .card.red {
@@ -360,6 +356,13 @@ li {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 5px;
+    margin-top: 6px;
+}
+
+.local-player-layout {
+    display: flex;
+    align-items: center;
+    gap: 15px;
     margin-top: 6px;
 }
 

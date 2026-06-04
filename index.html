@@ -108,13 +108,6 @@
                         <div class="discard-label">Discard</div>
                     </div>
 
-                    <div id="drawn-card-container" class="drawn-card-container hidden">
-                        <div id="drawn-card" class="card">
-                            <!-- Top drawn card goes here -->
-                        </div>
-                        <div class="discard-label">Drawn</div>
-                    </div>
-
                     <div id="action-prompt" class="action-prompt hidden">
                         <!-- Messages like "Choose a card to peek", "Choose a card to swap" go here -->
                     </div>
@@ -125,8 +118,16 @@
                 <!-- Local Player Area -->
                 <div id="local-player-container">
                     <h3 id="local-player-name">You</h3>
-                    <div id="local-player-cards" class="player-cards-grid">
-                        <!-- Local cards go here -->
+                    <div class="local-player-layout">
+                        <div id="local-player-cards" class="player-cards-grid">
+                            <!-- Local cards go here -->
+                        </div>
+                        <div id="drawn-card-container" class="drawn-card-container hidden">
+                            <div id="drawn-card" class="card">
+                                <!-- Top drawn card goes here -->
+                            </div>
+                            <div class="discard-label">Drawn</div>
+                        </div>
                     </div>
                     <div id="local-player-status" class="player-status"></div>
                 </div>
