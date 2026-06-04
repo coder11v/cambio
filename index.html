@@ -60,6 +60,15 @@
             </div>
         </div>
 
+        <!-- Multiple Rooms Section -->
+        <div id="multiple-rooms-section" style="display: none;">
+            <div class="lobby-box">
+                <h2 style="color: #ff6b6b; margin-bottom: 15px;">Multiple Rooms</h2>
+                <p style="margin-bottom: 20px; font-size: 0.95em; color: #a0aec0;">You are registered in multiple active rooms. Please delete or leave one to continue.</p>
+                <div id="multiple-rooms-list"></div>
+            </div>
+        </div>
+
         <!-- Waiting Room Section -->
         <div id="waiting-room-section" style="display: none;">
             <h2>Room Code: <span id="display-room-code"></span></h2>
@@ -73,7 +82,10 @@
         <div id="game-board-section" style="display: none;">
             <div class="top-bar">
                 <span>Room: <strong id="game-room-code"></strong></span>
-                <button id="cambio-btn">Call CAMBIO!</button>
+                <div>
+                    <button id="simulate-btn" style="display: none; background-color: #2b6cb0; border-color: #2b6cb0; margin-right: 10px;">Simulate Game</button>
+                    <button id="cambio-btn">Call CAMBIO!</button>
+                </div>
             </div>
 
             <div id="game-area">
@@ -94,6 +106,13 @@
                             <!-- Top discard card goes here -->
                         </div>
                         <div class="discard-label">Discard</div>
+                    </div>
+
+                    <div id="drawn-card-container" class="drawn-card-container hidden">
+                        <div id="drawn-card" class="card">
+                            <!-- Top drawn card goes here -->
+                        </div>
+                        <div class="discard-label">Drawn</div>
                     </div>
 
                     <div id="action-prompt" class="action-prompt hidden">
@@ -172,6 +191,10 @@
             </div>
         </div>
 
+        <!-- Footer Version -->
+        <footer class="app-footer">
+            <span id="version-display"></span>
+        </footer>
     </div>
 
     <script type="module" src="app.js"></script>

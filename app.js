@@ -19,6 +19,19 @@ function generateRoomCode() {
 document.addEventListener("DOMContentLoaded", () => {
     console.log("App loaded. Fetching Firebase config from Worker...");
 
+    // Fetch and display version from config.json
+    fetch('config.json')
+        .then(response => response.json())
+        .then(config => {
+            const versionDisplay = document.getElementById("version-display");
+            if (versionDisplay) {
+                versionDisplay.innerText = "v" + config.version;
+            }
+        })
+        .catch(err => {
+            console.error("Error loading config.json version:", err);
+        });
+
     // UI Elements
     const loadingEl = document.getElementById("loading");
     const authSection = document.getElementById("auth-section");
@@ -86,7 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             // Authentication state changes
-            window.firebaseAuth.onAuthStateChanged(auth, (user) => {
+            window.firebaseAuth.onAuthStateChanged(auth, async (user) => {
                 if (user && user.email) {
                     currentUser = user;
                     currentUsername = user.email.split('@')[0];
@@ -95,9 +108,94 @@ document.addEventListener("DOMContentLoaded", () => {
                     loadingEl.style.display = "none";
                     authSection.style.display = "none";
                     lobbyUsernameDisplay.innerText = currentUsername;
-                    if (!currentRoomCode) {
-                        lobbySection.style.display = "block";
-                    }
+
+                    // Query the database to see which rooms this player is currently in
+                    const checkUserRooms = async () => {
+                        try {
+                            const roomsRef = window.firebaseDb.ref(db, 'rooms');
+                            const snapshot = await window.firebaseDb.get(roomsRef);
+                            const rooms = snapshot.val() || {};
+
+                            const activeRooms = [];
+                            for (const code in rooms) {
+                                const room = rooms[code];
+                                if (room.players && room.players[currentUser.uid]) {
+                                    activeRooms.push({ code: code, room: room });
+                                }
+                            }
+
+                            // Hide all main containers first
+                            lobbySection.style.display = "none";
+                            document.getElementById("multiple-rooms-section").style.display = "none";
+                            waitingRoomSection.style.display = "none";
+                            gameBoardSection.style.display = "none";
+
+                            if (activeRooms.length === 1) {
+                                // Rejoin the single active room
+                                const targetRoom = activeRooms[0];
+                                console.log("Auto-rejoining room:", targetRoom.code);
+                                currentRoomCode = targetRoom.code;
+                                roomRef = window.firebaseDb.ref(db, `rooms/${currentRoomCode}`);
+                                isHost = (targetRoom.room.host === currentUser.uid);
+                                enterWaitingRoom();
+                            } else if (activeRooms.length > 1) {
+                                // Registered in multiple rooms - show error and allow them to leave/delete
+                                const multiSection = document.getElementById("multiple-rooms-section");
+                                const listContainer = document.getElementById("multiple-rooms-list");
+                                listContainer.innerHTML = "";
+
+                                activeRooms.forEach(({ code, room }) => {
+                                    const isRoomHost = room.host === currentUser.uid;
+                                    const item = document.createElement("div");
+                                    item.style.padding = "10px";
+                                    item.style.border = "1px solid #2d3748";
+                                    item.style.marginBottom = "10px";
+                                    item.style.display = "flex";
+                                    item.style.justifyContent = "space-between";
+                                    item.style.alignItems = "center";
+
+                                    const info = document.createElement("span");
+                                    info.innerText = `Room: ${code} ${isRoomHost ? '(Host)' : '(Guest)'}`;
+                                    item.appendChild(info);
+
+                                    const actionBtn = document.createElement("button");
+                                    actionBtn.innerText = isRoomHost ? "Delete" : "Leave";
+                                    actionBtn.style.backgroundColor = "#e74c3c";
+                                    actionBtn.style.borderColor = "#e74c3c";
+                                    actionBtn.style.padding = "4px 8px";
+                                    actionBtn.style.fontSize = "0.85em";
+
+                                    actionBtn.onclick = async () => {
+                                        actionBtn.disabled = true;
+                                        try {
+                                            if (isRoomHost) {
+                                                await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${code}`), null);
+                                            } else {
+                                                await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${code}/players/${currentUser.uid}`), null);
+                                            }
+                                            // Re-scan
+                                            await checkUserRooms();
+                                        } catch (err) {
+                                            console.error("Error leaving/deleting room:", err);
+                                            actionBtn.disabled = false;
+                                        }
+                                    };
+
+                                    item.appendChild(actionBtn);
+                                    listContainer.appendChild(item);
+                                });
+
+                                multiSection.style.display = "block";
+                            } else {
+                                lobbySection.style.display = "block";
+                            }
+                        } catch (err) {
+                            console.error("Auto-rejoin query error:", err);
+                            lobbySection.style.display = "block";
+                        }
+                    };
+
+                    await checkUserRooms();
                 } else {
                     currentUser = null;
                     currentUsername = null;
@@ -233,6 +331,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!data) return; // Room deleted
 
             localGameState = data;
+            isHost = (data.host === currentUser.uid);
 
             // Update player list
             playersList.innerHTML = "";
@@ -276,6 +375,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // 1. Update Deck Count
         document.getElementById("deck-count-val").innerText = roomData.deck ? roomData.deck.length : 0;
+
+        // 1.5 Update Drawn Card Slot
+        const drawnCardContainer = document.getElementById("drawn-card-container");
+        const drawnCardEl = document.getElementById("drawn-card");
+        if (selectedDrawnCard) {
+            drawnCardContainer.classList.remove("hidden");
+            drawnCardEl.className = `card ${selectedDrawnCard.color}`;
+            drawnCardEl.innerHTML = `
+                <div class="card-value">${selectedDrawnCard.value}</div>
+                <div class="card-suit">${getSuitSymbol(selectedDrawnCard.suit)}</div>
+                <div class="card-bottom-value">${selectedDrawnCard.value}</div>
+            `;
+        } else {
+            drawnCardContainer.classList.add("hidden");
+            if (drawnCardEl) drawnCardEl.innerHTML = "";
+        }
 
         // 2. Update Discard Pile
         const discardPileEl = document.getElementById("discard-pile");
@@ -387,6 +502,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 cambioBtn.style.display = "none";
             }
 
+            // Handle Simulate button
+            const players = Object.values(roomData.players || {});
+            const allVeerTest = players.length > 0 && players.every(p => p.name.startsWith("veertest"));
+            const simulateBtn = document.getElementById("simulate-btn");
+            if (isHost && allVeerTest) {
+                simulateBtn.style.display = "inline-block";
+                simulateBtn.onclick = startSimulation;
+            } else {
+                simulateBtn.style.display = "none";
+            }
+
             if (roomData.cambioCalledBy) {
                 const callerName = roomData.players[roomData.cambioCalledBy].name;
                 msgEl.innerText += ` | CAMBIO called by ${callerName}! Final turn.`;
@@ -424,7 +550,19 @@ document.addEventListener("DOMContentLoaded", () => {
             resultsList.appendChild(div);
         });
 
-        document.getElementById("back-to-lobby-btn").onclick = () => {
+        document.getElementById("back-to-lobby-btn").onclick = async () => {
+            try {
+                if (isHost) {
+                    // Host deletes the entire room
+                    await window.firebaseDb.set(roomRef, null);
+                } else {
+                    // Guest removes themselves from the player list
+                    const playerRef = window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`);
+                    await window.firebaseDb.set(playerRef, null);
+                }
+            } catch (err) {
+                console.error("Error leaving room:", err);
+            }
             location.reload(); // Simple way to reset
         };
     }
@@ -457,11 +595,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // --- TURN MECHANICS (DRAW & DISCARD) ---
     let localGameState = null;
     let selectedDrawnCard = null; // Holds the card drawn from the deck on your turn
     let activePower = null; // null, 'peek_own', 'peek_other', 'swap_1', 'swap_2'
     let swapCard1 = null; // { uid, index }
+    let simulationInterval = null;
 
 
 
@@ -487,33 +625,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (isMyTurn && !selectedDrawnCard) {
             deckEl.onclick = drawFromDeck;
-            discardPileEl.onclick = drawFromDiscard;
             deckEl.classList.add("selectable");
-            discardPileEl.classList.add("selectable");
+
+            if (!localGameState.discardPileFrozen) {
+                discardPileEl.onclick = drawFromDiscard;
+                discardPileEl.classList.add("selectable");
+            } else {
+                discardPileEl.classList.remove("selectable");
+            }
         } else {
             deckEl.classList.remove("selectable");
             discardPileEl.classList.remove("selectable");
         }
 
         // Make local hand cards clickable for swapping or powers/stacking
-        const localCards = document.getElementById("local-player-cards").children;
+        const localCardsContainer = document.getElementById("local-player-cards");
+        const localCards = localCardsContainer.children;
         for (let i = 0; i < localCards.length; i++) {
-            localCards[i].onclick = null;
-            localCards[i].classList.remove("selectable");
+            const cardEl = localCards[i];
+            cardEl.onclick = null;
+            cardEl.classList.remove("selectable");
 
             // Stacking out of turn OR standard interaction
             if (activePower === 'peek_own' || activePower === 'swap_1' || activePower === 'swap_2') {
                 if (isMyTurn) {
-                    localCards[i].classList.add("selectable");
-                    localCards[i].onclick = () => handlePowerClick(currentUser.uid, i);
+                    cardEl.classList.add("selectable");
+                    cardEl.onclick = () => handlePowerClick(currentUser.uid, i);
                 }
             } else if (isMyTurn && selectedDrawnCard) {
-                localCards[i].classList.add("selectable");
-                localCards[i].onclick = () => swapDrawnCardWithHand(i);
+                cardEl.classList.add("selectable");
+                cardEl.onclick = () => swapDrawnCardWithHand(i);
             } else if (!activePower && !selectedDrawnCard) {
                 // Allow stacking at any time if we aren't busy
-                localCards[i].classList.add("selectable");
-                localCards[i].onclick = () => attemptStack(i);
+                cardEl.classList.add("selectable");
+                cardEl.onclick = () => attemptStack(i);
             }
         }
 
@@ -537,23 +682,6 @@ document.addEventListener("DOMContentLoaded", () => {
             discardPileEl.onclick = discardDrawnCard;
             discardPileEl.classList.add("selectable");
         }
-
-        // Manage Stacking Mode / Stacking Alert
-        const stackAlertEl = document.getElementById("stack-alert");
-        if (stackAlertEl) {
-            if (!activePower && !selectedDrawnCard && localGameState.status === "playing") {
-                stackAlertEl.classList.remove("hidden");
-                stackAlertEl.innerText = "STACKING MODE (Click card to stack)";
-                for (let i = 0; i < localCards.length; i++) {
-                    localCards[i].classList.add("stack-target");
-                }
-            } else {
-                stackAlertEl.classList.add("hidden");
-                for (let i = 0; i < localCards.length; i++) {
-                    localCards[i].classList.remove("stack-target");
-                }
-            }
-        }
     }
 
     async function attemptStack(handIndex) {
@@ -574,7 +702,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             await window.firebaseDb.update(roomRef, {
                 [`players/${currentUser.uid}`]: player,
-                discardPile: newDiscard
+                discardPile: newDiscard,
+                discardPileFrozen: true
             });
             // Show a quick visual success if we want later
         } else {
@@ -606,6 +735,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // 2. Update state locally to allow user choice (swap or discard)
         selectedDrawnCard = drawnCard;
+        selectedDrawnCard.fromDeck = true;
 
         // 3. Update UI to show the card they drew
         document.getElementById("action-prompt").innerText = "You drew: " + drawnCard.value + ". Select a card in your hand to swap, or click Discard to discard it.";
@@ -618,6 +748,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function drawFromDiscard() {
         if (!localGameState || !localGameState.discardPile || localGameState.discardPile.length === 0) return;
+        if (localGameState.discardPileFrozen) {
+            alert("The discard pile is frozen because the top card was stacked!");
+            return;
+        }
 
         // Discard pile drawing MUST swap with a hand card immediately. 
         // We'll treat it as selectedDrawnCard but prevent immediate discard.
@@ -645,8 +779,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // The card from the hand goes to discard
         const cardToDiscard = player.cards[handIndex];
 
-        // Clean up fromDiscard flag
+        // Clean up fromDiscard / fromDeck flags
         delete selectedDrawnCard.fromDiscard;
+        delete selectedDrawnCard.fromDeck;
 
         // The drawn card goes to the hand
         player.cards[handIndex] = selectedDrawnCard;
@@ -662,6 +797,7 @@ document.addEventListener("DOMContentLoaded", () => {
         await window.firebaseDb.update(roomRef, {
             [`players/${currentUser.uid}`]: player,
             discardPile: newDiscardPile,
+            discardPileFrozen: false, // Unfreeze pile
             ...turnResult.updates
         });
     }
@@ -675,17 +811,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const newDiscardPile = [...(localGameState.discardPile || []), selectedDrawnCard];
         const discardedCard = selectedDrawnCard;
+        const wasFromDeck = selectedDrawnCard.fromDeck;
         selectedDrawnCard = null;
 
-        // Check for special powers
+        // Check for special powers ONLY if drawn from the mystery deck
         const val = discardedCard.value;
-        if (val === '7' || val === '8') {
+        if (wasFromDeck && (val === '7' || val === '8')) {
             activePower = 'peek_own';
             document.getElementById("action-prompt").innerText = "Power! Select one of YOUR cards to peek at.";
-        } else if (val === '9' || val === '10') {
+        } else if (wasFromDeck && (val === '9' || val === '10')) {
             activePower = 'peek_other';
             document.getElementById("action-prompt").innerText = "Power! Select an OPPONENT'S card to peek at.";
-        } else if (val === 'J' || val === 'Q') {
+        } else if (wasFromDeck && (val === 'J' || val === 'Q')) {
             activePower = 'swap_1';
             document.getElementById("action-prompt").innerText = "Power! Select ANY card (yours or opponent's) to swap.";
         } else {
@@ -694,13 +831,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (activePower) {
             // Wait for user interaction to finish the turn
-            await window.firebaseDb.update(roomRef, { discardPile: newDiscardPile });
+            await window.firebaseDb.update(roomRef, { discardPile: newDiscardPile, discardPileFrozen: false });
             attachInteractionListeners();
         } else {
             document.getElementById("action-prompt").classList.add("hidden");
             const turnResult = calculateNextTurn();
             await window.firebaseDb.update(roomRef, {
                 discardPile: newDiscardPile,
+                discardPileFrozen: false, // Unfreeze pile
                 ...turnResult.updates
             });
         }
@@ -800,6 +938,158 @@ document.addEventListener("DOMContentLoaded", () => {
         };
 
         await window.firebaseDb.update(roomRef, updates);
+    }
+
+    function startSimulation() {
+        const simulateBtn = document.getElementById("simulate-btn");
+        if (simulateBtn.disabled) return;
+        simulateBtn.disabled = true;
+        simulateBtn.innerText = "Simulating...";
+
+        if (simulationInterval) clearInterval(simulationInterval);
+
+        simulationInterval = setInterval(async () => {
+            // Fetch the latest room state from Firebase
+            const snap = await window.firebaseDb.get(roomRef);
+            const roomData = snap.val();
+
+            // If game is finished or not active, stop simulation
+            if (!roomData || roomData.status !== "playing") {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+                simulateBtn.disabled = false;
+                simulateBtn.innerText = "Simulate Game";
+                return;
+            }
+
+            const turnOrder = roomData.turnOrder || [];
+            const currentTurnUid = turnOrder[roomData.currentTurnIndex];
+            const activePlayer = roomData.players[currentTurnUid];
+            const activePlayerCards = activePlayer.cards || [];
+
+            // 1. Chance to call Cambio if total hand points are relatively low (e.g. <= 12 points)
+            const currentScore = activePlayerCards.reduce((acc, c) => acc + (c.numValue || 0), 0);
+            if (!roomData.cambioCalledBy && currentScore <= 12 && Math.random() < 0.35) {
+                console.log(`[Sim] ${activePlayer.name} calling CAMBIO!`);
+                const nextTurn = (roomData.currentTurnIndex + 1) % turnOrder.length;
+                await window.firebaseDb.update(roomRef, {
+                    cambioCalledBy: currentTurnUid,
+                    currentTurnIndex: nextTurn
+                });
+                return;
+            }
+
+            // 2. Draw card: 80% deck, 20% discard (if not frozen)
+            let drawFromDiscard = false;
+            if (roomData.discardPile && roomData.discardPile.length > 0 && !roomData.discardPileFrozen) {
+                if (Math.random() < 0.2) {
+                    drawFromDiscard = true;
+                }
+            }
+
+            if (drawFromDiscard) {
+                const newDiscard = [...roomData.discardPile];
+                const drawnCard = newDiscard.pop();
+                const swapIdx = Math.floor(Math.random() * activePlayerCards.length);
+
+                const cardToDiscard = activePlayerCards[swapIdx];
+                activePlayerCards[swapIdx] = drawnCard;
+                newDiscard.push(cardToDiscard);
+
+                const nextIndex = (roomData.currentTurnIndex + 1) % turnOrder.length;
+                let nextStatus = roomData.status;
+                if (roomData.cambioCalledBy && turnOrder[nextIndex] === roomData.cambioCalledBy) {
+                    nextStatus = "finished";
+                }
+
+                await window.firebaseDb.update(roomRef, {
+                    [`players/${currentTurnUid}/cards`]: activePlayerCards,
+                    discardPile: newDiscard,
+                    discardPileFrozen: false,
+                    currentTurnIndex: nextIndex,
+                    status: nextStatus
+                });
+            } else {
+                const newDeck = [...(roomData.deck || [])];
+                if (newDeck.length === 0) {
+                    await window.firebaseDb.update(roomRef, { status: "finished" });
+                    return;
+                }
+
+                const drawnCard = newDeck.pop();
+
+                // 50% swap with random card, 50% discard
+                if (Math.random() < 0.5) {
+                    const swapIdx = Math.floor(Math.random() * activePlayerCards.length);
+                    const cardToDiscard = activePlayerCards[swapIdx];
+                    activePlayerCards[swapIdx] = drawnCard;
+
+                    const newDiscard = [...(roomData.discardPile || []), cardToDiscard];
+                    const nextIndex = (roomData.currentTurnIndex + 1) % turnOrder.length;
+                    let nextStatus = roomData.status;
+                    if (roomData.cambioCalledBy && turnOrder[nextIndex] === roomData.cambioCalledBy) {
+                        nextStatus = "finished";
+                    }
+
+                    await window.firebaseDb.update(roomRef, {
+                        [`players/${currentTurnUid}/cards`]: activePlayerCards,
+                        discardPile: newDiscard,
+                        discardPileFrozen: false,
+                        deck: newDeck,
+                        currentTurnIndex: nextIndex,
+                        status: nextStatus
+                    });
+                } else {
+                    const newDiscard = [...(roomData.discardPile || []), drawnCard];
+                    const val = drawnCard.value;
+                    let updates = {
+                        discardPile: newDiscard,
+                        discardPileFrozen: false,
+                        deck: newDeck
+                    };
+
+                    // Execute powers simple emulation
+                    if (val === '7' || val === '8') {
+                        console.log(`[Sim] ${activePlayer.name} peeks own card`);
+                    } else if (val === '9' || val === '10') {
+                        console.log(`[Sim] ${activePlayer.name} peeks opponent card`);
+                    } else if (val === 'J' || val === 'Q') {
+                        const pIds = Object.keys(roomData.players);
+                        if (pIds.length >= 2) {
+                            const pid1 = pIds[Math.floor(Math.random() * pIds.length)];
+                            let pid2 = pIds[Math.floor(Math.random() * pIds.length)];
+                            if (pid1 === pid2) {
+                                pid2 = pIds[(pIds.indexOf(pid1) + 1) % pIds.length];
+                            }
+                            const hand1 = roomData.players[pid1].cards || [];
+                            const hand2 = roomData.players[pid2].cards || [];
+                            if (hand1.length > 0 && hand2.length > 0) {
+                                const idx1 = Math.floor(Math.random() * hand1.length);
+                                const idx2 = Math.floor(Math.random() * hand2.length);
+                                const c1 = hand1[idx1];
+                                const c2 = hand2[idx2];
+                                hand1[idx1] = c2;
+                                hand2[idx2] = c1;
+                                updates[`players/${pid1}/cards`] = hand1;
+                                updates[`players/${pid2}/cards`] = hand2;
+                                console.log(`[Sim] Swap card between ${roomData.players[pid1].name} and ${roomData.players[pid2].name}`);
+                            }
+                        }
+                    }
+
+                    const nextIndex = (roomData.currentTurnIndex + 1) % turnOrder.length;
+                    let nextStatus = roomData.status;
+                    if (roomData.cambioCalledBy && turnOrder[nextIndex] === roomData.cambioCalledBy) {
+                        nextStatus = "finished";
+                    }
+
+                    updates.currentTurnIndex = nextIndex;
+                    updates.status = nextStatus;
+
+                    await window.firebaseDb.update(roomRef, updates);
+                }
+            }
+        }, 500);
     }
 
     function calculateNextTurn() {
