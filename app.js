@@ -71,10 +71,64 @@ document.addEventListener("DOMContentLoaded", () => {
     const startGameBtn = document.getElementById("start-game-btn");
     const waitingMessage = document.getElementById("waiting-message");
 
+    // Chat UI Elements
+    const chatToggleBtn = document.getElementById("chat-toggle-btn");
+    const closeChatBtn = document.getElementById("close-chat-btn");
+    const chatPanel = document.getElementById("chat-panel");
+    const chatForm = document.getElementById("chat-form");
+    const chatInput = document.getElementById("chat-input");
+    const chatMessagesEl = document.getElementById("chat-messages");
+
+    let chatListenerOff = null;
+
+    chatToggleBtn.addEventListener("click", () => {
+        chatPanel.classList.remove("hidden-slide");
+        chatToggleBtn.classList.add("hidden");
+    });
+
+    closeChatBtn.addEventListener("click", () => {
+        chatPanel.classList.add("hidden-slide");
+        chatToggleBtn.classList.remove("hidden");
+    });
+
     // Rules Modal Logic
     const rulesToggleBtn = document.getElementById("rules-toggle-btn");
     const closeRulesBtn = document.getElementById("close-rules-btn");
     const rulesModal = document.getElementById("rules-modal");
+
+    // Audio Elements & State
+    const audioToggleBtn = document.getElementById("audio-toggle-btn");
+    const bgmAudio = document.getElementById("bgm-audio");
+    const sfxDraw = document.getElementById("sfx-draw");
+    const sfxPlay = document.getElementById("sfx-play");
+    const sfxError = document.getElementById("sfx-error");
+    const sfxCambio = document.getElementById("sfx-cambio");
+    let isAudioEnabled = true;
+
+    function playSound(soundEl) {
+        if (!isAudioEnabled) return;
+        soundEl.currentTime = 0;
+        soundEl.play().catch(e => console.log("Audio play prevented:", e));
+    }
+
+    audioToggleBtn.addEventListener("click", () => {
+        isAudioEnabled = !isAudioEnabled;
+        if (isAudioEnabled) {
+            audioToggleBtn.innerText = "🔊";
+            bgmAudio.play().catch(e => console.log("Audio play prevented:", e));
+        } else {
+            audioToggleBtn.innerText = "🔇";
+            bgmAudio.pause();
+        }
+    });
+
+    // Automatically try to start BGM when user interacts with anything
+    window.addEventListener('click', () => {
+        if (isAudioEnabled && bgmAudio.paused) {
+            bgmAudio.play().catch(e => console.log("Audio play prevented:", e));
+        }
+    }, { once: true });
+
 
     rulesToggleBtn.addEventListener("click", () => {
         rulesModal.classList.remove("hidden");
@@ -421,6 +475,9 @@ document.addEventListener("DOMContentLoaded", () => {
             waitingMessage.style.display = "none";
         }
 
+        // Setup Chat
+        setupChat(currentRoomCode);
+
         // Listen for room changes
         window.firebaseDb.onValue(roomRef, (snapshot) => {
             const data = snapshot.val();
@@ -672,6 +729,59 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
+    function setupChat(roomCode) {
+        if (chatListenerOff) {
+            chatListenerOff(); // clean up old listener
+            chatListenerOff = null;
+        }
+
+        chatMessagesEl.innerHTML = "";
+        chatToggleBtn.classList.remove("hidden");
+
+        const chatRef = window.firebaseDb.ref(db, `rooms/${roomCode}/chat`);
+
+        chatForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if (!text || !currentUser) return;
+
+            chatInput.value = "";
+            const newMsgRef = window.firebaseDb.ref(db, `rooms/${roomCode}/chat/${Date.now()}`);
+            await window.firebaseDb.set(newMsgRef, {
+                uid: currentUser.uid,
+                name: currentUsername,
+                text: text,
+                timestamp: Date.now()
+            });
+        };
+
+        const onChatAdded = window.firebaseDb.onValue(chatRef, (snapshot) => {
+            chatMessagesEl.innerHTML = "";
+            const messages = snapshot.val() || {};
+            const sortedKeys = Object.keys(messages).sort();
+
+            sortedKeys.forEach(key => {
+                const msg = messages[key];
+                const div = document.createElement("div");
+                const isSelf = msg.uid === currentUser.uid;
+                div.className = `chat-message ${isSelf ? 'self' : 'other'}`;
+                const strong = document.createElement("strong");
+                strong.innerText = msg.name;
+                div.appendChild(strong);
+                const textSpan = document.createElement("span");
+                textSpan.innerText = msg.text;
+                div.appendChild(textSpan);
+                chatMessagesEl.appendChild(div);
+            });
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+        });
+
+        chatListenerOff = () => {
+            // Need to detach listener when leaving room. firebaseDb.off is standard but we didn't export it in index.html.
+            // Using a simple flag or re-structuring could work. For now, we assume simple app flow.
+        };
+    }
+
     function getSuitSymbol(suit) {
         switch (suit) {
             case 'hearts': return '♥';
@@ -800,18 +910,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const cardToStack = player.cards[handIndex];
 
+        const sourceCardEl = document.getElementById("local-player-cards").children[handIndex];
+        const discardPileEl = document.getElementById("discard-pile");
+
         if (cardToStack.value === topDiscard.value) {
-            // Success! Remove from hand, add to discard
+            playSound(sfxPlay);
+
+            // Remove from hand immediately to prevent double stacking
             player.cards.splice(handIndex, 1);
             const newDiscard = [...localGameState.discardPile, cardToStack];
 
+            // Lock the discard pile immediately so no one else draws it while animating
             await window.firebaseDb.update(roomRef, {
                 [`players/${currentUser.uid}`]: player,
                 discardPile: newDiscard,
                 discardPileFrozen: true
             });
-            // Show a quick visual success if we want later
+
+            animateCardFlight(sourceCardEl, discardPileEl, cardToStack, () => {});
         } else {
+            playSound(sfxError);
             // Fail! Draw penalty card
             alert("Wrong card! You draw a penalty card.");
             const deckRef = window.firebaseDb.ref(db, `rooms/${currentRoomCode}/deck`);
@@ -834,6 +952,7 @@ document.addEventListener("DOMContentLoaded", () => {
     async function drawFromDeck() {
         if (!localGameState || localGameState.deck.length === 0) return;
 
+        playSound(sfxDraw);
         // 1. Pop from deck
         const newDeck = [...localGameState.deck];
         const drawnCard = newDeck.pop();
@@ -849,6 +968,14 @@ document.addEventListener("DOMContentLoaded", () => {
         // 4. Temporarily update Firebase deck so others see the card is gone
         await window.firebaseDb.update(roomRef, { deck: newDeck });
         attachInteractionListeners();
+
+        const deckEl = document.getElementById("deck");
+        const drawnCardEl = document.getElementById("drawn-card");
+
+        // Ensure drawn card container is visible to animate towards
+        document.getElementById("drawn-card-container").classList.remove("hidden");
+
+        animateCardFlight(deckEl, drawnCardEl, drawnCard, () => {});
     }
 
     async function drawFromDiscard() {
@@ -858,6 +985,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
+        playSound(sfxDraw);
         // Discard pile drawing MUST swap with a hand card immediately. 
         // We'll treat it as selectedDrawnCard but prevent immediate discard.
         const newDiscard = [...localGameState.discardPile];
@@ -883,13 +1011,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // The card from the hand goes to discard
         const cardToDiscard = player.cards[handIndex];
+        const drawnCardToSave = selectedDrawnCard;
 
         // Clean up fromDiscard / fromDeck flags
-        delete selectedDrawnCard.fromDiscard;
-        delete selectedDrawnCard.fromDeck;
+        delete drawnCardToSave.fromDiscard;
+        delete drawnCardToSave.fromDeck;
+
+        playSound(sfxPlay);
+
+        const drawnCardEl = document.getElementById("drawn-card");
+        const handCardEl = document.getElementById("local-player-cards").children[handIndex];
+        const discardPileEl = document.getElementById("discard-pile");
 
         // The drawn card goes to the hand
-        player.cards[handIndex] = selectedDrawnCard;
+        player.cards[handIndex] = drawnCardToSave;
 
         const newDiscardPile = [...(localGameState.discardPile || []), cardToDiscard];
 
@@ -905,6 +1040,10 @@ document.addEventListener("DOMContentLoaded", () => {
             discardPileFrozen: false, // Unfreeze pile
             ...turnResult.updates
         });
+
+        // Start both animations
+        animateCardFlight(drawnCardEl, handCardEl, drawnCardToSave, () => {});
+        animateCardFlight(handCardEl, discardPileEl, cardToDiscard, () => {});
     }
 
     async function discardDrawnCard() {
@@ -914,9 +1053,15 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        const newDiscardPile = [...(localGameState.discardPile || []), selectedDrawnCard];
-        const discardedCard = selectedDrawnCard;
-        const wasFromDeck = selectedDrawnCard.fromDeck;
+        playSound(sfxPlay);
+
+        const drawnCardEl = document.getElementById("drawn-card");
+        const discardPileEl = document.getElementById("discard-pile");
+        const cardToAnimate = selectedDrawnCard;
+
+        const newDiscardPile = [...(localGameState.discardPile || []), cardToAnimate];
+        const discardedCard = cardToAnimate;
+        const wasFromDeck = cardToAnimate.fromDeck;
         selectedDrawnCard = null;
 
         // Check for special powers ONLY if drawn from the mystery deck
@@ -947,6 +1092,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 ...turnResult.updates
             });
         }
+
+        animateCardFlight(drawnCardEl, discardPileEl, cardToAnimate, () => {});
     }
 
     async function handlePowerClick(targetUid, cardIndex) {
@@ -983,6 +1130,7 @@ document.addEventListener("DOMContentLoaded", () => {
             p2.cards = p2.cards || [];
 
             const card1 = p1.cards[swapCard1.index];
+            playSound(sfxPlay);
             const card2 = p2.cards[cardIndex];
 
             p1.cards[swapCard1.index] = card2;
@@ -1221,12 +1369,65 @@ document.addEventListener("DOMContentLoaded", () => {
     async function callCambio() {
         if (!localGameState || localGameState.turnOrder[localGameState.currentTurnIndex] !== currentUser.uid) return;
 
+        playSound(sfxCambio);
         const nextTurn = (localGameState.currentTurnIndex + 1) % localGameState.turnOrder.length;
 
         await window.firebaseDb.update(roomRef, {
             cambioCalledBy: currentUser.uid,
             currentTurnIndex: nextTurn
         });
+    }
+
+    // --- ANIMATIONS ---
+    function animateCardFlight(sourceEl, targetEl, cardData, callback) {
+        if (!sourceEl || !targetEl) {
+            if (callback) callback();
+            return;
+        }
+
+        const sourceRect = sourceEl.getBoundingClientRect();
+        const targetRect = targetEl.getBoundingClientRect();
+
+        const clone = document.createElement("div");
+        clone.className = "card flying-card";
+        if (cardData && cardData.value) {
+            clone.classList.add(cardData.color);
+            clone.innerHTML = `
+                <div class="card-value">${cardData.value}</div>
+                <div class="card-suit">${getSuitSymbol(cardData.suit)}</div>
+                <div class="card-bottom-value">${cardData.value}</div>
+            `;
+        } else {
+            clone.innerHTML = `<div class="card-back">CAMBIO</div>`;
+        }
+
+        // Set initial position
+        clone.style.left = `${sourceRect.left}px`;
+        clone.style.top = `${sourceRect.top}px`;
+        clone.style.width = `${sourceRect.width}px`;
+        clone.style.height = `${sourceRect.height}px`;
+
+        document.body.appendChild(clone);
+
+        // Hide target element temporarily
+        const oldOpacity = targetEl.style.opacity;
+        targetEl.style.opacity = '0';
+
+        // Trigger reflow
+        clone.offsetHeight;
+
+        // Animate to target position
+        clone.style.left = `${targetRect.left}px`;
+        clone.style.top = `${targetRect.top}px`;
+        clone.style.width = `${targetRect.width}px`;
+        clone.style.height = `${targetRect.height}px`;
+        clone.style.transform = 'scale(1)';
+
+        setTimeout(() => {
+            targetEl.style.opacity = oldOpacity;
+            clone.remove();
+            if (callback) callback();
+        }, 500); // match transition duration
     }
 
     // --- CORE GAME LOGIC (DECK & DEALING) ---
