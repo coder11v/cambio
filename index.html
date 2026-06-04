@@ -4,7 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cambio Multiplayer</title>
+    <meta name="description" content="Cambio — a real-time multiplayer card game. Bluff, peek, and swap your way to the lowest score.">
+    <meta name="theme-color" content="#0a0c10">
+    <title>Cambio — Multiplayer Card Game</title>
+
+    <!-- Google Fonts: Inter + JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
     <link rel="stylesheet" href="styles.css">
 
     <!-- Firebase SDKs -->
@@ -32,13 +40,13 @@
         <div id="auth-section" style="display: none;">
             <div class="lobby-box">
                 <h2>Login or Sign Up</h2>
-                <input type="text" id="auth-username" placeholder="Username" maxlength="15">
-                <br><br>
-                <input type="password" id="auth-password" placeholder="Password">
-                <br><br>
-                <button id="login-btn">Login</button>
-                <button id="signup-btn">Sign Up</button>
-                <div id="auth-error" style="color: #ff6b6b; margin-top: 10px; font-size: 0.9em;"></div>
+                <input type="text" id="auth-username" placeholder="Username" maxlength="15" autocomplete="username">
+                <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+                <div style="display:flex; gap:8px; justify-content:center; margin-top:20px;">
+                    <button id="login-btn">Login</button>
+                    <button id="signup-btn" class="secondary-btn">Sign Up</button>
+                </div>
+                <div id="auth-error"></div>
             </div>
         </div>
 
@@ -46,16 +54,12 @@
         <div id="lobby-section" style="display: none;">
             <div class="lobby-box">
                 <h2>Welcome, <span id="lobby-username-display"></span>!</h2>
-                <button id="signout-btn"
-                    style="background-color: #e74c3c; padding: 5px 10px; font-size: 0.9em; margin-bottom: 15px;">Sign
-                    Out</button>
-                <h3>Join or Create Room</h3>
+                <button id="signout-btn" style="margin-bottom: 16px;">Sign Out</button>
+                <h3 style="margin-bottom:16px;">Join or Create Room</h3>
                 <button id="create-room-btn">Create New Room</button>
-                <br><br>
                 <div class="join-area">
-                    <input type="text" id="room-code-input" placeholder="Room Code" maxlength="4"
-                        style="text-transform: uppercase;">
-                    <button id="join-room-btn">Join Room</button>
+                    <input type="text" id="room-code-input" placeholder="Room Code" maxlength="4">
+                    <button id="join-room-btn">Join</button>
                 </div>
             </div>
         </div>
@@ -63,8 +67,8 @@
         <!-- Multiple Rooms Section -->
         <div id="multiple-rooms-section" style="display: none;">
             <div class="lobby-box">
-                <h2 style="color: #ff6b6b; margin-bottom: 15px;">Multiple Rooms</h2>
-                <p style="margin-bottom: 20px; font-size: 0.95em; color: #a0aec0;">You are registered in multiple active rooms. Please delete or leave one to continue.</p>
+                <h2 style="margin-bottom: 12px;">Multiple Rooms</h2>
+                <p>You are registered in multiple active rooms. Please delete or leave one to continue.</p>
                 <div id="multiple-rooms-list"></div>
             </div>
         </div>
@@ -72,8 +76,8 @@
         <!-- Admin Section -->
         <div id="admin-section" style="display: none;">
             <div class="lobby-box" style="max-width: 600px;">
-                <h2 style="color: #ecc94b; margin-bottom: 10px;">Admin Dashboard</h2>
-                <button id="admin-signout-btn" style="background-color: #e74c3c; border-color: #e74c3c; padding: 4px 8px; font-size: 0.85em; margin-bottom: 15px;">Sign Out</button>
+                <h2 style="margin-bottom: 10px;">Admin Dashboard</h2>
+                <button id="admin-signout-btn" style="margin-bottom: 15px;">Sign Out</button>
                 <h3>Active Room Sessions</h3>
                 <div id="admin-rooms-list" style="margin-top: 15px; text-align: left;">
                     <!-- Active rooms go here -->
@@ -207,8 +211,8 @@
         <!-- Admin Ended Overlay -->
         <div id="admin-ended-overlay" class="modal hidden">
             <div class="modal-content" style="text-align: center; max-width: 400px; margin: auto;">
-                <h2 style="color: #ff6b6b; margin-bottom: 15px;">Session Terminated</h2>
-                <p style="color: #cbd5e0; margin-bottom: 20px;">This game session was ended by the administrator.</p>
+                <h2>Session Terminated</h2>
+                <p>This game session was ended by the administrator.</p>
                 <button id="admin-ended-close-btn">Back to Lobby</button>
             </div>
         </div>

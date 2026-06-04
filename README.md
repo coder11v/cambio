@@ -1,7 +1,7 @@
 # Cambio Card Game (Multiplayer)
 
 An interactive, real-time multiplayer version of the card game Cambio (also known as Cabo).
-
+(bulit with coder11v, antigravity ide, and stitch by google.)
 ## Setup Instructions
 
 Since you are hosting the frontend on GitHub Pages and want to keep your configuration out of the public repository, we will use a Cloudflare Worker to serve the Firebase configuration to your frontend. 
