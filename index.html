@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cambio Multiplayer</title>
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+        import { getDatabase, ref, set, get, onValue, update, runTransaction } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+
+        // Expose Firebase functions to global scope for our app.js
+        window.firebaseApp = { initializeApp };
+        window.firebaseDb = { getDatabase, ref, set, get, onValue, update, runTransaction };
+        window.firebaseAuth = { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
+    </script>
+</head>
+
+<body>
+    <div id="app">
+        <header class="app-header">
+            <h1>Cambio</h1>
+            <button id="rules-toggle-btn" class="secondary-btn">How to Play</button>
+        </header>
+        <div id="loading">Connecting to server...</div>
+
+        <!-- Auth Section (Username/Password) -->
+        <div id="auth-section" style="display: none;">
+            <div class="lobby-box">
+                <h2>Login or Sign Up</h2>
+                <input type="text" id="auth-username" placeholder="Username" maxlength="15">
+                <br><br>
+                <input type="password" id="auth-password" placeholder="Password">
+                <br><br>
+                <button id="login-btn">Login</button>
+                <button id="signup-btn">Sign Up</button>
+                <div id="auth-error" style="color: #ff6b6b; margin-top: 10px; font-size: 0.9em;"></div>
+            </div>
+        </div>
+
+        <!-- Lobby Section -->
+        <div id="lobby-section" style="display: none;">
+            <div class="lobby-box">
+                <h2>Welcome, <span id="lobby-username-display"></span>!</h2>
+                <button id="signout-btn"
+                    style="background-color: #e74c3c; padding: 5px 10px; font-size: 0.9em; margin-bottom: 15px;">Sign
+                    Out</button>
+                <h3>Join or Create Room</h3>
+                <button id="create-room-btn">Create New Room</button>
+                <br><br>
+                <div class="join-area">
+                    <input type="text" id="room-code-input" placeholder="Room Code" maxlength="4"
+                        style="text-transform: uppercase;">
+                    <button id="join-room-btn">Join Room</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waiting Room Section -->
+        <div id="waiting-room-section" style="display: none;">
+            <h2>Room Code: <span id="display-room-code"></span></h2>
+            <h3>Players:</h3>
+            <ul id="players-list"></ul>
+            <button id="start-game-btn" style="display: none;">Start Game</button>
+            <p id="waiting-message">Waiting for host to start...</p>
+        </div>
+
+        <!-- Game Board Section -->
+        <div id="game-board-section" style="display: none;">
+            <div class="top-bar">
+                <span>Room: <strong id="game-room-code"></strong></span>
+                <button id="cambio-btn">Call CAMBIO!</button>
+            </div>
+
+            <div id="game-area">
+                <!-- Opponents will be rendered here dynamically -->
+                <div id="opponents-container"></div>
+
+                <!-- Center Area (Deck & Discard) -->
+                <div id="center-area">
+                    <div class="deck-container">
+                        <div id="deck" class="card deck-card">
+                            <div class="card-back">CAMBIO</div>
+                        </div>
+                        <div class="deck-count">Cards: <span id="deck-count-val"></span></div>
+                    </div>
+
+                    <div class="discard-container">
+                        <div id="discard-pile" class="card empty-slot">
+                            <!-- Top discard card goes here -->
+                        </div>
+                        <div class="discard-label">Discard</div>
+                    </div>
+
+                    <div id="action-prompt" class="action-prompt hidden">
+                        <!-- Messages like "Choose a card to peek", "Choose a card to swap" go here -->
+                    </div>
+
+                    <div id="stack-alert" class="stack-alert hidden"></div>
+                </div>
+
+                <!-- Local Player Area -->
+                <div id="local-player-container">
+                    <h3 id="local-player-name">You</h3>
+                    <div id="local-player-cards" class="player-cards-grid">
+                        <!-- Local cards go here -->
+                    </div>
+                    <div id="local-player-status" class="player-status"></div>
+                </div>
+            </div>
+
+            <!-- Turn Indicator & Messages -->
+            <div id="game-messages"></div>
+        </div>
+
+        <!-- Game Over / Results Section -->
+        <div id="results-section" style="display: none;">
+            <h2>Game Over!</h2>
+            <div id="results-list"></div>
+            <button id="back-to-lobby-btn">Back to Lobby</button>
+        </div>
+
+        <!-- Rules Modal -->
+        <div id="rules-modal" class="modal hidden">
+            <div class="modal-content">
+                <span id="close-rules-btn" class="close-btn">&times;</span>
+                <h2>How to Play Cambio</h2>
+                <div class="rules-body">
+                    <h3>Objective</h3>
+                    <p>Have the lowest total card score when "CAMBIO" is called and the game ends.</p>
+
+                    <h3>Card Values</h3>
+                    <ul>
+                        <li><strong>A</strong>: 1 point</li>
+                        <li><strong>2 to 10</strong>: Face value</li>
+                        <li><strong>J, Q</strong>: 10 points</li>
+                        <li><strong>Red Kings (Hearts, Diamonds)</strong>: -1 point</li>
+                        <li><strong>Black Kings (Spades, Clubs)</strong>: 10 points</li>
+                        <li><strong>Jokers</strong>: 0 points</li>
+                    </ul>
+
+                    <h3>Action Card Powers</h3>
+                    <p>If you draw and discard these cards directly, you can use their power:</p>
+                    <ul>
+                        <li><strong>7 or 8</strong>: Peek at one of your own cards.</li>
+                        <li><strong>9 or 10</strong>: Peek at an opponent's card.</li>
+                        <li><strong>J or Q</strong>: Swap any card in play (yours or opponent's) with another card,
+                            without looking at them.</li>
+                    </ul>
+
+                    <h3>Gameplay</h3>
+                    <ol>
+                        <li>Every player starts with 4 face-down cards, and gets to look at their bottom 2 cards once at
+                            the beginning.</li>
+                        <li>On your turn, you draw a card from either the Deck or the Discard pile.</li>
+                        <li>If you draw from the deck, you can either swap it with one of your hand cards (discarding
+                            the old hand card) OR discard the drawn card directly. Discarding special cards (7-Q) lets
+                            you use their power.</li>
+                        <li>If you draw from the discard pile, you must swap it with a card from your hand.</li>
+                        <li><strong>Stacking</strong>: At any time, if you know your card matches the value of the top
+                            card on the discard pile, you can throw it directly on top of the discard pile to get rid of
+                            it. If you are wrong, you draw a penalty card.</li>
+                        <li><strong>Calling Cambio</strong>: If you believe you have the lowest score, you can call
+                            "Cambio" on your turn. Every other player gets one final turn, then all cards are revealed
+                            and scores are compared.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,13 @@
+ INFO  Accepting connections at http://localhost:3000
+ HTTP  6/4/2026 8:33:01 PM ::1 GET /
+ HTTP  6/4/2026 8:33:01 PM ::1 Returned 200 in 374 ms
+ HTTP  6/4/2026 8:33:02 PM ::1 GET /styles.css
+ HTTP  6/4/2026 8:33:02 PM ::1 GET /app.js
+ HTTP  6/4/2026 8:33:02 PM ::1 Returned 200 in 4 ms
+ HTTP  6/4/2026 8:33:02 PM ::1 Returned 200 in 4 ms
+ HTTP  6/4/2026 8:35:39 PM ::1 GET /
+ HTTP  6/4/2026 8:35:39 PM ::1 Returned 200 in 2 ms
+ HTTP  6/4/2026 8:35:39 PM ::1 GET /styles.css
+ HTTP  6/4/2026 8:35:39 PM ::1 GET /app.js
+ HTTP  6/4/2026 8:35:39 PM ::1 Returned 200 in 4 ms
+ HTTP  6/4/2026 8:35:39 PM ::1 Returned 200 in 6 ms
