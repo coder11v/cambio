@@ -32,8 +32,18 @@
     <div id="app">
         <header class="app-header">
             <h1>Cambio</h1>
-            <button id="rules-toggle-btn" class="secondary-btn">How to Play</button>
+            <div style="display: flex; gap: 8px;">
+                <button id="audio-toggle-btn" class="secondary-btn">🔊</button>
+                <button id="rules-toggle-btn" class="secondary-btn">How to Play</button>
+            </div>
         </header>
+
+        <!-- Audio Elements -->
+        <audio id="bgm-audio" src="assets/audio/bgm.wav" loop></audio>
+        <audio id="sfx-draw" src="assets/audio/draw.wav"></audio>
+        <audio id="sfx-play" src="assets/audio/play.wav"></audio>
+        <audio id="sfx-error" src="assets/audio/error.wav"></audio>
+        <audio id="sfx-cambio" src="assets/audio/cambio.wav"></audio>
         <div id="loading">Connecting to server...</div>
 
         <!-- Auth Section (Username/Password) -->
@@ -215,6 +225,24 @@
                 <p>This game session was ended by the administrator.</p>
                 <button id="admin-ended-close-btn">Back to Lobby</button>
             </div>
+        </div>
+
+        <!-- Chat Toggle Button (Floating) -->
+        <button id="chat-toggle-btn" class="chat-toggle-btn hidden">💬</button>
+
+        <!-- Slide-out Chat Panel -->
+        <div id="chat-panel" class="chat-panel hidden-slide">
+            <div class="chat-header">
+                <h3>Room Chat</h3>
+                <button id="close-chat-btn" class="secondary-btn" style="padding: 2px 8px; font-size: 12px;">X</button>
+            </div>
+            <div id="chat-messages" class="chat-messages">
+                <!-- Messages go here -->
+            </div>
+            <form id="chat-form" class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off" maxlength="100">
+                <button type="submit" id="chat-send-btn">Send</button>
+            </form>
         </div>
 
         <!-- Footer Version -->
