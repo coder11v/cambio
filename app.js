@@ -19,8 +19,8 @@ function generateRoomCode() {
 document.addEventListener("DOMContentLoaded", () => {
     console.log("App loaded. Fetching Firebase config from Worker...");
 
-    // Fetch and display version from config.json
-    fetch('config.json')
+    // Fetch and display version from assets/config.json
+    fetch('assets/config.json')
         .then(response => response.json())
         .then(config => {
             const versionDisplay = document.getElementById("version-display");
@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         })
         .catch(err => {
-            console.error("Error loading config.json version:", err);
+            console.error("Error loading assets/config.json version:", err);
         });
 
     // UI Elements

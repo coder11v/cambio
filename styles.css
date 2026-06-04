@@ -239,15 +239,15 @@ li {
 
 /* Flat Card Design */
 .card {
-    width: 65px;
-    height: 95px;
+    width: 58px;
+    height: 84px;
     background-color: #ffffff;
     border: 2px solid #2d3748;
     border-radius: 4px;
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 800;
     cursor: pointer;
     user-select: none;
@@ -267,7 +267,7 @@ li {
     justify-content: center;
     align-items: center;
     color: #ffffff;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.05em;
     border: 2px solid #ffffff;
@@ -325,15 +325,15 @@ li {
 #opponents-container {
     display: flex;
     justify-content: center;
-    gap: 15px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 15px;
+    margin-bottom: 5px;
 }
 
 .opponent {
     background-color: #1a202c;
     border: 2px solid #2d3748;
-    padding: 10px;
+    padding: 6px;
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -341,22 +341,33 @@ li {
 }
 
 .opponent h4 {
-    font-size: 14px;
+    font-size: 12px;
     color: #cbd5e0;
+}
+
+.opponent .card {
+    width: 42px;
+    height: 60px;
+    border: 1px solid #2d3748;
+}
+
+.opponent .card-back {
+    font-size: 8px;
+    border: 1px solid #ffffff;
 }
 
 .player-cards-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-    margin-top: 8px;
+    gap: 5px;
+    margin-top: 6px;
 }
 
 /* Local Player Area */
 #local-player-container {
     background-color: #1a202c;
     border: 2px solid #2d3748;
-    padding: 15px;
+    padding: 10px;
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -365,13 +376,13 @@ li {
 }
 
 #local-player-name {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 800;
 }
 
 .player-status {
-    margin-top: 8px;
-    font-size: 12px;
+    margin-top: 6px;
+    font-size: 11px;
     font-weight: 800;
     color: #ecc94b;
     text-transform: uppercase;
@@ -380,14 +391,14 @@ li {
 /* Messages Banner */
 #game-messages {
     text-align: center;
-    padding: 8px;
-    font-size: 15px;
+    padding: 6px;
+    font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
     background-color: #2d3748;
     border: 2px solid #4a5568;
     border-radius: 4px;
-    margin-top: 15px;
+    margin-top: 10px;
 }
 
 /* Flat Modal Overlay */
@@ -463,8 +474,10 @@ li {
 
 /* Footer Styles */
 .app-footer {
-    text-align: center;
-    padding-top: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 8px;
     margin-top: auto;
     font-size: 11px;
     font-weight: 700;
