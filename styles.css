@@ -557,6 +557,13 @@ li {
   box-shadow: 0 4px 16px rgba(221,107,32,0.4);
 }
 
+.action-prompt.power-choice {
+  top: -65px;
+  border-radius: var(--r-md);
+  white-space: normal;
+  padding: 8px 12px;
+}
+
 .stack-alert {
   position: absolute;
   bottom: -36px;

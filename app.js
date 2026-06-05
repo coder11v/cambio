@@ -1072,25 +1072,65 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Check for special powers ONLY if drawn from the mystery deck
         const val = discardedCard.value;
+        let pendingPower = null;
+        let powerPrompt = "";
+
         if (wasFromDeck && (val === '7' || val === '8')) {
-            activePower = 'peek_own';
-            document.getElementById("action-prompt").innerText = "Power! Select one of YOUR cards to peek at.";
+            pendingPower = 'peek_own';
+            powerPrompt = "Peek own card";
         } else if (wasFromDeck && (val === '9' || val === '10')) {
-            activePower = 'peek_other';
-            document.getElementById("action-prompt").innerText = "Power! Select an OPPONENT'S card to peek at.";
+            pendingPower = 'peek_other';
+            powerPrompt = "Peek opponent's card";
         } else if (wasFromDeck && (val === 'J' || val === 'Q')) {
-            activePower = 'swap_1';
-            document.getElementById("action-prompt").innerText = "Power! Select ANY card (yours or opponent's) to swap.";
-        } else {
-            activePower = null;
+            pendingPower = 'swap_1';
+            powerPrompt = "Swap any 2 cards";
         }
 
-        if (activePower) {
+        if (pendingPower) {
+            const actionPrompt = document.getElementById("action-prompt");
+            actionPrompt.innerHTML = `
+                <div class="power-prompt-container">
+                    <p style="margin: 0 0 6px 0;">Power available: ${powerPrompt}!</p>
+                    <div style="display: flex; gap: 8px; justify-content: center;">
+                        <button id="use-power-btn" class="primary-btn" style="padding: 4px 10px; font-size: 0.8em; text-transform: uppercase;">Use Power</button>
+                        <button id="skip-power-btn" class="secondary-btn" style="padding: 4px 10px; font-size: 0.8em; text-transform: uppercase; background-color: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff;">Skip</button>
+                    </div>
+                </div>
+            `;
+            actionPrompt.className = "action-prompt power-choice";
+            actionPrompt.classList.remove("hidden");
+
             // Wait for user interaction to finish the turn
             await window.firebaseDb.update(roomRef, { discardPile: newDiscardPile, discardPileFrozen: false });
             attachInteractionListeners();
+
+            document.getElementById("use-power-btn").onclick = () => {
+                activePower = pendingPower;
+                actionPrompt.className = "action-prompt";
+                if (activePower === 'peek_own') {
+                    actionPrompt.innerText = "Power! Select one of YOUR cards to peek at.";
+                } else if (activePower === 'peek_other') {
+                    actionPrompt.innerText = "Power! Select an OPPONENT'S card to peek at.";
+                } else if (activePower === 'swap_1') {
+                    actionPrompt.innerText = "Power! Select ANY card (yours or opponent's) to swap.";
+                }
+                attachInteractionListeners();
+            };
+
+            document.getElementById("skip-power-btn").onclick = async () => {
+                activePower = null;
+                actionPrompt.className = "action-prompt";
+                actionPrompt.classList.add("hidden");
+                const turnResult = calculateNextTurn();
+                await window.firebaseDb.update(roomRef, {
+                    ...turnResult.updates
+                });
+            };
         } else {
-            document.getElementById("action-prompt").classList.add("hidden");
+            activePower = null;
+            const actionPrompt = document.getElementById("action-prompt");
+            actionPrompt.className = "action-prompt";
+            actionPrompt.classList.add("hidden");
             const turnResult = calculateNextTurn();
             await window.firebaseDb.update(roomRef, {
                 discardPile: newDiscardPile,
