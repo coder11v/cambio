@@ -199,14 +199,15 @@ document.addEventListener("DOMContentLoaded", () => {
                             }
 
                             const roomData = snap.val();
-                            if (roomData.status !== "waiting") {
+                            const isAlreadyInRoom = roomData.players && roomData.players[currentUser.uid];
+                            if (roomData.status !== "waiting" && !isAlreadyInRoom) {
                                 alert("Game already in progress!");
                                 lobbySection.style.display = "block";
                                 return;
                             }
 
                             const currentPlayers = Object.keys(roomData.players || {}).length;
-                            if (currentPlayers >= 8) {
+                            if (!isAlreadyInRoom && currentPlayers >= 8) {
                                 alert("Room is full! (Max 8 players)");
                                 lobbySection.style.display = "block";
                                 return;
@@ -215,12 +216,14 @@ document.addEventListener("DOMContentLoaded", () => {
                             currentRoomCode = code;
                             roomRef = targetRoomRef;
 
-                            // Add player to room
-                            await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), {
-                                name: currentUsername,
-                                order: currentPlayers,
-                                isHost: false
-                            });
+                            if (!isAlreadyInRoom) {
+                                // Add player to room
+                                await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), {
+                                    name: currentUsername,
+                                    order: currentPlayers,
+                                    isHost: false
+                                });
+                            }
 
                             enterWaitingRoom();
                         } catch (err) {
@@ -443,24 +446,27 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const roomData = snapshot.val();
-        if (roomData.status !== "waiting") {
+        const isAlreadyInRoom = roomData.players && roomData.players[currentUser.uid];
+        if (roomData.status !== "waiting" && !isAlreadyInRoom) {
             return alert("Game already in progress!");
         }
 
         const currentPlayers = Object.keys(roomData.players || {}).length;
-        if (currentPlayers >= 8) {
+        if (!isAlreadyInRoom && currentPlayers >= 8) {
             return alert("Room is full! (Max 8 players)");
         }
 
         currentRoomCode = code;
         roomRef = targetRoomRef;
 
-        // Add player to room
-        await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), {
-            name: name,
-            order: currentPlayers, // simple ordering for now
-            isHost: false
-        });
+        if (!isAlreadyInRoom) {
+            // Add player to room
+            await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), {
+                name: name,
+                order: currentPlayers, // simple ordering for now
+                isHost: false
+            });
+        }
 
         enterWaitingRoom();
     });
