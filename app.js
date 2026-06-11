@@ -601,6 +601,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     cardEl.className = "card";
                     cardEl.dataset.index = index;
 
+                    if (swapCard1 && swapCard1.uid === uid && swapCard1.index === index) {
+                        cardEl.classList.add("swapping-selected");
+                    }
+                    if (swapCard2 && swapCard2.uid === uid && swapCard2.index === index) {
+                        cardEl.classList.add("swapping-selected");
+                    }
+
                     // Logic to show bottom 2 cards during "starting" phase
                     if (roomData.status === "starting" && !player.hasLookedAtStartingCards && (index === 2 || index === 3)) {
                         cardEl.classList.add(card.color);
@@ -644,6 +651,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     const cardEl = document.createElement("div");
                     cardEl.className = "card";
                     cardEl.innerHTML = `<div class="card-back">CAMBIO</div>`;
+
+                    if (swapCard1 && swapCard1.uid === uid && swapCard1.index === index) {
+                        cardEl.classList.add("swapping-selected");
+                    }
+                    if (swapCard2 && swapCard2.uid === uid && swapCard2.index === index) {
+                        cardEl.classList.add("swapping-selected");
+                    }
+
                     cardsGrid.appendChild(cardEl);
                 });
 
@@ -820,6 +835,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedDrawnCard = null; // Holds the card drawn from the deck on your turn
     let activePower = null; // null, 'peek_own', 'peek_other', 'swap_1', 'swap_2'
     let swapCard1 = null; // { uid, index }
+    let swapCard2 = null; // { uid, index }
     let simulationInterval = null;
 
 
@@ -870,8 +886,12 @@ document.addEventListener("DOMContentLoaded", () => {
             // Stacking out of turn OR standard interaction
             if (activePower === 'peek_own' || activePower === 'swap_1' || activePower === 'swap_2') {
                 if (isMyTurn) {
-                    cardEl.classList.add("selectable");
-                    cardEl.onclick = () => handlePowerClick(currentUser.uid, i);
+                    if (swapCard1 && swapCard1.uid === currentUser.uid && swapCard1.index === i) {
+                        // Card already selected for swap
+                    } else {
+                        cardEl.classList.add("selectable");
+                        cardEl.onclick = () => handlePowerClick(currentUser.uid, i);
+                    }
                 }
             } else if (isMyTurn && selectedDrawnCard) {
                 cardEl.classList.add("selectable");
@@ -889,10 +909,19 @@ document.addEventListener("DOMContentLoaded", () => {
             opponentContainers.forEach(opp => {
                 const oppUid = opp.dataset.uid;
 
+                // If this opponent called Cambio, they are untouchable!
+                if (localGameState.cambioCalledBy === oppUid) {
+                    return;
+                }
+
                 const cards = opp.querySelectorAll('.card');
                 cards.forEach((card, index) => {
-                    card.classList.add("selectable");
-                    card.onclick = () => handlePowerClick(oppUid, index);
+                    if (swapCard1 && swapCard1.uid === oppUid && swapCard1.index === index) {
+                        // Card already selected for swap
+                    } else {
+                        card.classList.add("selectable");
+                        card.onclick = () => handlePowerClick(oppUid, index);
+                    }
                 });
             });
         }
@@ -1145,65 +1174,99 @@ document.addEventListener("DOMContentLoaded", () => {
     async function handlePowerClick(targetUid, cardIndex) {
         if (!activePower) return;
 
+        // Untouchable by actions if target has called Cambio and is not us
+        if (localGameState.cambioCalledBy === targetUid && targetUid !== currentUser.uid) {
+            alert("This player has called Cambio and is untouchable by actions!");
+            return;
+        }
+
         const targetPlayer = localGameState.players[targetUid];
         targetPlayer.cards = targetPlayer.cards || [];
         const targetCard = targetPlayer.cards[cardIndex];
 
         if (activePower === 'peek_own' && targetUid === currentUser.uid) {
             showTemporaryCard(targetUid, cardIndex, targetCard);
-            endTurnAfterPower();
         }
         else if (activePower === 'peek_other' && targetUid !== currentUser.uid) {
             showTemporaryCard(targetUid, cardIndex, targetCard);
-            endTurnAfterPower();
         }
         else if (activePower === 'swap_1') {
             swapCard1 = { uid: targetUid, index: cardIndex };
             activePower = 'swap_2';
             document.getElementById("action-prompt").innerText = "Select a SECOND card to swap with.";
+            renderGameBoard(localGameState);
             attachInteractionListeners();
         }
         else if (activePower === 'swap_2') {
-            // Cannot swap the exact same card with itself, but we'll allow same player if they misclick
             if (swapCard1.uid === targetUid && swapCard1.index === cardIndex) {
                 alert("Choose a different card!");
                 return;
             }
+            swapCard2 = { uid: targetUid, index: cardIndex };
+            activePower = 'swap_confirm';
 
-            const p1 = localGameState.players[swapCard1.uid];
-            const p2 = localGameState.players[targetUid];
-            p1.cards = p1.cards || [];
-            p2.cards = p2.cards || [];
+            renderGameBoard(localGameState);
+            attachInteractionListeners();
 
-            const card1 = p1.cards[swapCard1.index];
-            playSound(sfxPlay);
-            const card2 = p2.cards[cardIndex];
+            const actionPrompt = document.getElementById("action-prompt");
+            actionPrompt.innerHTML = `
+                <div class="power-prompt-container">
+                    <p style="margin: 0 0 6px 0;">Swap selected cards?</p>
+                    <div style="display: flex; gap: 8px; justify-content: center;">
+                        <button id="confirm-swap-btn" class="primary-btn" style="padding: 4px 10px; font-size: 0.8em; text-transform: uppercase;">Confirm</button>
+                        <button id="cancel-swap-btn" class="secondary-btn" style="padding: 4px 10px; font-size: 0.8em; text-transform: uppercase; background-color: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff;">Cancel</button>
+                    </div>
+                </div>
+            `;
+            actionPrompt.className = "action-prompt power-choice";
+            actionPrompt.classList.remove("hidden");
 
-            p1.cards[swapCard1.index] = card2;
-            p2.cards[cardIndex] = card1;
+            document.getElementById("confirm-swap-btn").onclick = async () => {
+                const p1 = localGameState.players[swapCard1.uid];
+                const p2 = localGameState.players[swapCard2.uid];
+                p1.cards = p1.cards || [];
+                p2.cards = p2.cards || [];
 
-            let updates = {};
-            updates[`players/${swapCard1.uid}`] = p1;
-            updates[`players/${targetUid}`] = p2;
+                const card1 = p1.cards[swapCard1.index];
+                playSound(sfxPlay);
+                const card2 = p2.cards[swapCard2.index];
 
-            swapCard1 = null;
-            endTurnAfterPower(updates);
+                p1.cards[swapCard1.index] = card2;
+                p2.cards[swapCard2.index] = card1;
+
+                let updates = {};
+                updates[`players/${swapCard1.uid}`] = p1;
+                updates[`players/${swapCard2.uid}`] = p2;
+
+                swapCard1 = null;
+                swapCard2 = null;
+                actionPrompt.className = "action-prompt";
+                actionPrompt.classList.add("hidden");
+
+                await endTurnAfterPower(updates);
+            };
+
+            document.getElementById("cancel-swap-btn").onclick = () => {
+                swapCard1 = null;
+                swapCard2 = null;
+                activePower = 'swap_1';
+                actionPrompt.className = "action-prompt";
+                actionPrompt.innerText = "Power! Select ANY card (yours or opponent's) to swap.";
+                renderGameBoard(localGameState);
+                attachInteractionListeners();
+            };
         }
     }
 
     function showTemporaryCard(uid, index, cardData) {
-        // Find the visual element and flip it temporarily for the local user only
         let cardEl;
         if (uid === currentUser.uid) {
             cardEl = document.getElementById("local-player-cards").children[index];
         } else {
-            // Find opponent
-            const oppContainers = document.querySelectorAll('.opponent');
-            oppContainers.forEach(opp => {
-                if (opp.querySelector('h4').innerText === localGameState.players[uid].name) {
-                    cardEl = opp.querySelectorAll('.card')[index];
-                }
-            });
+            const oppEl = document.querySelector(`.opponent[data-uid="${uid}"]`);
+            if (oppEl) {
+                cardEl = oppEl.querySelectorAll('.card')[index];
+            }
         }
 
         if (cardEl) {
@@ -1218,10 +1281,28 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="card-bottom-value">${cardData.value}</div>
             `;
 
-            setTimeout(() => {
+            const actionPrompt = document.getElementById("action-prompt");
+            actionPrompt.innerHTML = `
+                <div class="power-prompt-container">
+                    <p style="margin: 0 0 6px 0;">You saw: ${cardData.value} of ${getSuitSymbol(cardData.suit)}</p>
+                    <button id="ready-continue-btn" class="primary-btn" style="padding: 4px 10px; font-size: 0.8em; text-transform: uppercase;">Ready to Continue</button>
+                </div>
+            `;
+            actionPrompt.className = "action-prompt power-choice";
+            actionPrompt.classList.remove("hidden");
+
+            activePower = null;
+            attachInteractionListeners();
+
+            document.getElementById("ready-continue-btn").onclick = async () => {
                 cardEl.innerHTML = originalHtml;
                 cardEl.className = 'card ' + (originalColor ? originalColor : '');
-            }, 3000); // show for 3 seconds
+                
+                actionPrompt.className = "action-prompt";
+                actionPrompt.classList.add("hidden");
+                
+                await endTurnAfterPower();
+            };
         }
     }
 

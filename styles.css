@@ -564,6 +564,11 @@ li {
   padding: 8px 12px;
 }
 
+.swapping-selected {
+  border: 2px solid #3182ce !important;
+  box-shadow: 0 0 14px rgba(49, 130, 206, 0.6) !important;
+}
+
 .stack-alert {
   position: absolute;
   bottom: -36px;
