@@ -345,6 +345,40 @@ button:disabled {
   border-color: rgba(255,60,60,0.45);
 }
 
+/* OAuth Chip Button */
+.oauth-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #ffffff;
+  color: #1f1f1f;
+  border: 1px solid #747775;
+  border-radius: 9999px;
+  padding: 8px 24px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: auto;
+  height: auto;
+}
+
+.oauth-chip:hover {
+  background: #f8f9fa;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transform: none;
+}
+
+.oauth-chip img {
+  height: 20px;
+  width: auto;
+  filter: none;
+}
+
 /* ── Inputs ── */
 input {
   font-family: 'Inter', sans-serif;

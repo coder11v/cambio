@@ -15,18 +15,18 @@
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
 
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
 
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
         import { getDatabase, ref, set, get, onValue, update, runTransaction } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-database.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+        import { getAuth, signInAnonymously, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
         // Expose Firebase functions to global scope for our app.js
         window.firebaseApp = { initializeApp };
         window.firebaseDb = { getDatabase, ref, set, get, onValue, update, runTransaction };
-        window.firebaseAuth = { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged };
+        window.firebaseAuth = { getAuth, signInAnonymously, signOut, onAuthStateChanged };
     </script>
 </head>
 
@@ -48,17 +48,30 @@
         <audio id="sfx-cambio" src="assets/audio/cambio.wav"></audio>
         <div id="loading">Connecting to server...</div>
 
-        <!-- Auth Section (Username/Password) -->
+        <!-- Auth Section (OAuth) -->
         <div id="auth-section" style="display: none;">
             <div class="lobby-box">
-                <h2>Login or Sign Up</h2>
-                <input type="text" id="auth-username" placeholder="Username" maxlength="15" autocomplete="username">
-                <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
-                <div style="display:flex; gap:8px; justify-content:center; margin-top:20px;">
-                    <button id="login-btn">Login</button>
-                    <button id="signup-btn" class="secondary-btn">Sign Up</button>
+                <h2>Login with ViB Account</h2>
+                <div style="display:flex; justify-content:center; margin-top:20px;">
+                    <button id="vib-login-btn" class="oauth-chip">
+                        <img src="assets/signin.svg" alt="ViB Logo">
+                        <span>Sign in with ViB</span>
+                    </button>
                 </div>
                 <div id="auth-error"></div>
+            </div>
+        </div>
+
+        <!-- Username Setup Section -->
+        <div id="username-section" style="display: none;">
+            <div class="lobby-box">
+                <h2>Choose Username</h2>
+                <p>Welcome! Please pick a username for Cambio.</p>
+                <input type="text" id="setup-username" placeholder="Username" maxlength="15" style="margin-top: 10px;">
+                <div style="display:flex; justify-content:center; margin-top:20px;">
+                    <button id="save-username-btn">Save</button>
+                </div>
+                <div id="username-error"></div>
             </div>
         </div>
 

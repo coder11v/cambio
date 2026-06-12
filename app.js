@@ -45,13 +45,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // UI Elements
     const loadingEl = document.getElementById("loading");
     const authSection = document.getElementById("auth-section");
-    const authUsernameInput = document.getElementById("auth-username");
-    const authPasswordInput = document.getElementById("auth-password");
-    const loginBtn = document.getElementById("login-btn");
-    const signupBtn = document.getElementById("signup-btn");
+    const vibLoginBtn = document.getElementById("vib-login-btn");
+    const authErrorEl = document.getElementById("auth-error");
+
+    const usernameSection = document.getElementById("username-section");
+    const setupUsernameInput = document.getElementById("setup-username");
+    const saveUsernameBtn = document.getElementById("save-username-btn");
+    const usernameErrorEl = document.getElementById("username-error");
+
     const signoutBtn = document.getElementById("signout-btn");
     const lobbyUsernameDisplay = document.getElementById("lobby-username-display");
-    const authErrorEl = document.getElementById("auth-error");
 
     const adminSection = document.getElementById("admin-section");
     const adminSignoutBtn = document.getElementById("admin-signout-btn");
@@ -168,15 +171,243 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
-            // Authentication state changes
+            const checkUserRooms = async () => {
+                try {
+                    const roomsRef = window.firebaseDb.ref(db, 'rooms');
+                    const snapshot = await window.firebaseDb.get(roomsRef);
+                    const rooms = snapshot.val() || {};
+
+                    const activeRooms = [];
+                    for (const code in rooms) {
+                        const room = rooms[code];
+                        if (room.players && room.players[currentUser.uid]) {
+                            activeRooms.push({ code: code, room: room });
+                        }
+                    }
+
+                    // Hide all main containers first
+                    lobbySection.style.display = "none";
+                    document.getElementById("multiple-rooms-section").style.display = "none";
+                    waitingRoomSection.style.display = "none";
+                    gameBoardSection.style.display = "none";
+                    adminSection.style.display = "none";
+
+                    if (activeRooms.length === 1) {
+                        // Rejoin the single active room
+                        const targetRoom = activeRooms[0];
+                        console.log("Auto-rejoining room:", targetRoom.code);
+                        currentRoomCode = targetRoom.code;
+                        roomRef = window.firebaseDb.ref(db, `rooms/${currentRoomCode}`);
+                        isHost = (targetRoom.room.host === currentUser.uid);
+                        enterWaitingRoom();
+                    } else if (activeRooms.length > 1) {
+                        // Registered in multiple rooms - show error and allow them to leave/delete
+                        const multiSection = document.getElementById("multiple-rooms-section");
+                        const listContainer = document.getElementById("multiple-rooms-list");
+                        listContainer.innerHTML = "";
+
+                        activeRooms.forEach(({ code, room }) => {
+                            const isRoomHost = room.host === currentUser.uid;
+                            const item = document.createElement("div");
+                            item.style.padding = "10px";
+                            item.style.border = "1px solid #2d3748";
+                            item.style.marginBottom = "10px";
+                            item.style.display = "flex";
+                            item.style.justifyContent = "space-between";
+                            item.style.alignItems = "center";
+
+                            const info = document.createElement("span");
+                            info.innerText = `Room: ${code} ${isRoomHost ? '(Host)' : '(Guest)'}`;
+                            item.appendChild(info);
+
+                            const actionBtn = document.createElement("button");
+                            actionBtn.innerText = isRoomHost ? "Delete" : "Leave";
+                            actionBtn.style.backgroundColor = "#e74c3c";
+                            actionBtn.style.borderColor = "#e74c3c";
+                            actionBtn.style.padding = "4px 8px";
+                            actionBtn.style.fontSize = "0.85em";
+
+                            actionBtn.onclick = async () => {
+                                actionBtn.disabled = true;
+                                try {
+                                    if (isRoomHost) {
+                                        await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${code}`), null);
+                                    } else {
+                                        await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${code}/players/${currentUser.uid}`), null);
+                                    }
+                                    // Re-scan
+                                    await checkUserRooms();
+                                } catch (err) {
+                                    console.error("Error leaving/deleting room:", err);
+                                    actionBtn.disabled = false;
+                                }
+                            };
+
+                            item.appendChild(actionBtn);
+                            listContainer.appendChild(item);
+                        });
+
+                        multiSection.style.display = "block";
+                    } else {
+                        const pendingRoom = localStorage.getItem('pendingRoomCode');
+                        if (pendingRoom) {
+                            localStorage.removeItem('pendingRoomCode');
+                            await autoJoinRoom(pendingRoom);
+                        } else {
+                            lobbySection.style.display = "block";
+                        }
+                    }
+                } catch (err) {
+                    console.error("Auto-rejoin query error:", err);
+                    lobbySection.style.display = "block";
+                }
+            };
+
+            const autoJoinRoom = async (code) => {
+                try {
+                    const targetRoomRef = window.firebaseDb.ref(db, `rooms/${code}`);
+                    const snap = await window.firebaseDb.get(targetRoomRef);
+
+                    if (!snap.exists()) {
+                        alert(`Room ${code} not found!`);
+                        lobbySection.style.display = "block";
+                        return;
+                    }
+
+                    const roomData = snap.val();
+                    const isAlreadyInRoom = roomData.players && roomData.players[currentUser.uid];
+                    if (roomData.status !== "waiting" && !isAlreadyInRoom) {
+                        alert("Game already in progress!");
+                        lobbySection.style.display = "block";
+                        return;
+                    }
+
+                    const currentPlayers = Object.keys(roomData.players || {}).length;
+                    if (!isAlreadyInRoom && currentPlayers >= 8) {
+                        alert("Room is full! (Max 8 players)");
+                        lobbySection.style.display = "block";
+                        return;
+                    }
+
+                    currentRoomCode = code;
+                    roomRef = targetRoomRef;
+
+                    if (!isAlreadyInRoom) {
+                        // Add player to room
+                        await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), {
+                            name: currentUsername,
+                            order: currentPlayers,
+                            isHost: false
+                        });
+                    }
+
+                    enterWaitingRoom();
+                } catch (err) {
+                    console.error("Auto join error:", err);
+                    lobbySection.style.display = "block";
+                }
+            };
+
+            // ViB Accounts OAuth Constants
+            const CLIENT_ID = "cambio";
+            // Simple local obfuscation to hide the raw secret string from plain sight
+            const ENCRYPTED_SECRET = "bG91ZC1tdXNpYy1hcmthZGUtaXMtcGxheWluZy1mZDQ4ZjZmMDQ4NTE0NmQ5OTc5N2Y4NzlzZGZmc2Q3ZzZkc2ZnamtyZQ==";
+            const AUTH_GATEWAY_URL = "https://auth-gateway.veerbajaj11.workers.dev";
+
+            // 1. Process OAuth Code if present
+            const oauthUrlParams = new URLSearchParams(window.location.search);
+            const oauthCode = oauthUrlParams.get('code');
+
+            if (oauthCode) {
+                loadingEl.innerText = "Authenticating...";
+                loadingEl.style.display = "block";
+
+                fetch(`${AUTH_GATEWAY_URL}/oauth/token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        client_secret: atob(ENCRYPTED_SECRET),
+                        code: oauthCode
+                    })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.access_token) {
+                            localStorage.setItem('vib_access_token', data.access_token);
+                            // Clean URL parameter
+                            const cleanUrl = window.location.origin + window.location.pathname;
+                            window.history.replaceState({}, document.title, cleanUrl);
+                            loadUserDataFlow();
+                        } else {
+                            throw new Error(data.error || "Failed to exchange code");
+                        }
+                    })
+                    .catch(err => {
+                        console.error("OAuth Exchange Error:", err);
+                        authErrorEl.innerText = "Authentication failed. Try again.";
+                        loadingEl.style.display = "none";
+                        authSection.style.display = "block";
+                    });
+            } else {
+                // No code, check for existing token
+                if (localStorage.getItem('vib_access_token')) {
+                    loadUserDataFlow();
+                } else {
+                    loadingEl.style.display = "none";
+                    authSection.style.display = "block";
+                }
+            }
+
+            function loadUserDataFlow() {
+                loadingEl.innerText = "Loading user profile...";
+                loadingEl.style.display = "block";
+
+                const token = localStorage.getItem('vib_access_token');
+
+                fetch(`${AUTH_GATEWAY_URL}/api/load`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+                    .then(res => res.json())
+                    .then(result => {
+                        if (result.data && result.data.username) {
+                            // User exists and has a username
+                            currentUsername = result.data.username;
+                            initializeFirebaseLogin();
+                        } else {
+                            // Needs to set up a username
+                            loadingEl.style.display = "none";
+                            usernameSection.style.display = "block";
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Profile Load Error:", err);
+                        loadingEl.style.display = "none";
+                        localStorage.removeItem('vib_access_token');
+                        authSection.style.display = "block";
+                    });
+            }
+
+            function initializeFirebaseLogin() {
+                loadingEl.innerText = "Connecting to game server...";
+
+                window.firebaseAuth.signInAnonymously(auth).catch(err => {
+                    console.error("Anonymous Sign-in Error:", err);
+                    authErrorEl.innerText = "Failed to connect to game database.";
+                    loadingEl.style.display = "none";
+                    authSection.style.display = "block";
+                });
+            }
+
             window.firebaseAuth.onAuthStateChanged(auth, async (user) => {
-                if (user && user.email) {
+                if (user && currentUsername) {
                     currentUser = user;
-                    currentUsername = user.email.split('@')[0];
-                    console.log("Signed in as:", currentUsername);
+                    console.log("Signed in to DB anonymously, User:", currentUsername);
 
                     loadingEl.style.display = "none";
                     authSection.style.display = "none";
+                    usernameSection.style.display = "none";
                     lobbyUsernameDisplay.innerText = currentUsername;
 
                     if (currentUsername === "veeradmin") {
@@ -184,201 +415,69 @@ document.addEventListener("DOMContentLoaded", () => {
                         return;
                     }
 
-                    // Read pending room code from sharing link
-                    const pendingRoom = localStorage.getItem('pendingRoomCode');
-
-                    const autoJoinRoom = async (code) => {
-                        try {
-                            const targetRoomRef = window.firebaseDb.ref(db, `rooms/${code}`);
-                            const snap = await window.firebaseDb.get(targetRoomRef);
-
-                            if (!snap.exists()) {
-                                alert(`Room ${code} not found!`);
-                                lobbySection.style.display = "block";
-                                return;
-                            }
-
-                            const roomData = snap.val();
-                            const isAlreadyInRoom = roomData.players && roomData.players[currentUser.uid];
-                            if (roomData.status !== "waiting" && !isAlreadyInRoom) {
-                                alert("Game already in progress!");
-                                lobbySection.style.display = "block";
-                                return;
-                            }
-
-                            const currentPlayers = Object.keys(roomData.players || {}).length;
-                            if (!isAlreadyInRoom && currentPlayers >= 8) {
-                                alert("Room is full! (Max 8 players)");
-                                lobbySection.style.display = "block";
-                                return;
-                            }
-
-                            currentRoomCode = code;
-                            roomRef = targetRoomRef;
-
-                            if (!isAlreadyInRoom) {
-                                // Add player to room
-                                await window.firebaseDb.update(window.firebaseDb.ref(db, `rooms/${currentRoomCode}/players/${currentUser.uid}`), {
-                                    name: currentUsername,
-                                    order: currentPlayers,
-                                    isHost: false
-                                });
-                            }
-
-                            enterWaitingRoom();
-                        } catch (err) {
-                            console.error("Auto join error:", err);
-                            lobbySection.style.display = "block";
-                        }
-                    };
-
-                    // Query the database to see which rooms this player is currently in
-                    const checkUserRooms = async () => {
-                        try {
-                            const roomsRef = window.firebaseDb.ref(db, 'rooms');
-                            const snapshot = await window.firebaseDb.get(roomsRef);
-                            const rooms = snapshot.val() || {};
-
-                            const activeRooms = [];
-                            for (const code in rooms) {
-                                const room = rooms[code];
-                                if (room.players && room.players[currentUser.uid]) {
-                                    activeRooms.push({ code: code, room: room });
-                                }
-                            }
-
-                            // Hide all main containers first
-                            lobbySection.style.display = "none";
-                            document.getElementById("multiple-rooms-section").style.display = "none";
-                            waitingRoomSection.style.display = "none";
-                            gameBoardSection.style.display = "none";
-                            adminSection.style.display = "none";
-
-                            if (activeRooms.length === 1) {
-                                // Rejoin the single active room
-                                const targetRoom = activeRooms[0];
-                                console.log("Auto-rejoining room:", targetRoom.code);
-                                currentRoomCode = targetRoom.code;
-                                roomRef = window.firebaseDb.ref(db, `rooms/${currentRoomCode}`);
-                                isHost = (targetRoom.room.host === currentUser.uid);
-                                enterWaitingRoom();
-                            } else if (activeRooms.length > 1) {
-                                // Registered in multiple rooms - show error and allow them to leave/delete
-                                const multiSection = document.getElementById("multiple-rooms-section");
-                                const listContainer = document.getElementById("multiple-rooms-list");
-                                listContainer.innerHTML = "";
-
-                                activeRooms.forEach(({ code, room }) => {
-                                    const isRoomHost = room.host === currentUser.uid;
-                                    const item = document.createElement("div");
-                                    item.style.padding = "10px";
-                                    item.style.border = "1px solid #2d3748";
-                                    item.style.marginBottom = "10px";
-                                    item.style.display = "flex";
-                                    item.style.justifyContent = "space-between";
-                                    item.style.alignItems = "center";
-
-                                    const info = document.createElement("span");
-                                    info.innerText = `Room: ${code} ${isRoomHost ? '(Host)' : '(Guest)'}`;
-                                    item.appendChild(info);
-
-                                    const actionBtn = document.createElement("button");
-                                    actionBtn.innerText = isRoomHost ? "Delete" : "Leave";
-                                    actionBtn.style.backgroundColor = "#e74c3c";
-                                    actionBtn.style.borderColor = "#e74c3c";
-                                    actionBtn.style.padding = "4px 8px";
-                                    actionBtn.style.fontSize = "0.85em";
-
-                                    actionBtn.onclick = async () => {
-                                        actionBtn.disabled = true;
-                                        try {
-                                            if (isRoomHost) {
-                                                await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${code}`), null);
-                                            } else {
-                                                await window.firebaseDb.set(window.firebaseDb.ref(db, `rooms/${code}/players/${currentUser.uid}`), null);
-                                            }
-                                            // Re-scan
-                                            await checkUserRooms();
-                                        } catch (err) {
-                                            console.error("Error leaving/deleting room:", err);
-                                            actionBtn.disabled = false;
-                                        }
-                                    };
-
-                                    item.appendChild(actionBtn);
-                                    listContainer.appendChild(item);
-                                });
-
-                                multiSection.style.display = "block";
-                            } else {
-                                if (pendingRoom) {
-                                    localStorage.removeItem('pendingRoomCode');
-                                    await autoJoinRoom(pendingRoom);
-                                } else {
-                                    lobbySection.style.display = "block";
-                                }
-                            }
-                        } catch (err) {
-                            console.error("Auto-rejoin query error:", err);
-                            lobbySection.style.display = "block";
-                        }
-                    };
-
                     await checkUserRooms();
-                } else {
-                    currentUser = null;
-                    currentUsername = null;
-                    loadingEl.style.display = "none";
-                    lobbySection.style.display = "none";
-                    authSection.style.display = "block";
+                } else if (!user && localStorage.getItem('vib_access_token')) {
+                    // We have an access token but not anonymously signed in yet, or signed out.
+                    // If currentUsername is set, we just try to sign in again.
+                    if (currentUsername) {
+                        initializeFirebaseLogin();
+                    }
                 }
             });
 
-            // Login, Signup, Signout button events
-            loginBtn.addEventListener("click", () => {
-                const username = authUsernameInput.value.trim().toLowerCase();
-                const password = authPasswordInput.value;
-                if (!username || !password) {
-                    authErrorEl.innerText = "Enter both username and password!";
-                    return;
-                }
-                authErrorEl.innerText = "";
-
-                const email = `${username}@cambio.veerbajaj.com`;
-                window.firebaseAuth.signInWithEmailAndPassword(auth, email, password)
-                    .catch(err => {
-                        authErrorEl.innerText = "Error: " + err.message;
-                    });
+            // OAuth Login Button
+            vibLoginBtn.addEventListener("click", () => {
+                const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+                window.location.href = `https://account.veerbajaj.com/?client_id=${CLIENT_ID}&redirect_uri=${redirectUri}`;
             });
 
-            signupBtn.addEventListener("click", () => {
-                const username = authUsernameInput.value.trim().toLowerCase();
-                const password = authPasswordInput.value;
-                if (!username || !password) {
-                    authErrorEl.innerText = "Enter both username and password!";
-                    return;
-                }
+            // Save Username Button
+            saveUsernameBtn.addEventListener("click", () => {
+                const username = setupUsernameInput.value.trim().toLowerCase();
                 if (username.length < 3) {
-                    authErrorEl.innerText = "Username must be at least 3 characters!";
+                    usernameErrorEl.innerText = "Username must be at least 3 characters!";
                     return;
                 }
-                authErrorEl.innerText = "";
+                usernameErrorEl.innerText = "";
 
-                const email = `${username}@cambio.veerbajaj.com`;
-                window.firebaseAuth.createUserWithEmailAndPassword(auth, email, password)
+                const token = localStorage.getItem('vib_access_token');
+
+                fetch(`${AUTH_GATEWAY_URL}/api/save`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            username: { stringValue: username }
+                        }
+                    })
+                })
+                    .then(res => {
+                        if (!res.ok) throw new Error("Failed to save username");
+                        currentUsername = username;
+                        usernameSection.style.display = "none";
+                        initializeFirebaseLogin();
+                    })
                     .catch(err => {
-                        authErrorEl.innerText = "Error: " + err.message;
+                        console.error("Save Username Error:", err);
+                        usernameErrorEl.innerText = "Error saving username. Please try again.";
                     });
             });
 
             signoutBtn.addEventListener("click", () => {
-                window.firebaseAuth.signOut(auth)
-                    .catch(err => console.error("Signout Error:", err));
+                localStorage.removeItem('vib_access_token');
+                window.firebaseAuth.signOut(auth).then(() => {
+                    location.reload();
+                });
             });
 
             adminSignoutBtn.addEventListener("click", () => {
-                window.firebaseAuth.signOut(auth)
-                    .catch(err => console.error("Signout Error:", err));
+                localStorage.removeItem('vib_access_token');
+                window.firebaseAuth.signOut(auth).then(() => {
+                    location.reload();
+                });
             });
 
             adminEndedCloseBtn.addEventListener("click", async () => {
@@ -962,7 +1061,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 discardPileFrozen: true
             });
 
-            animateCardFlight(sourceCardEl, discardPileEl, cardToStack, () => {});
+            animateCardFlight(sourceCardEl, discardPileEl, cardToStack, () => { });
         } else {
             playSound(sfxError);
             // Fail! Draw penalty card
@@ -1010,7 +1109,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Ensure drawn card container is visible to animate towards
         document.getElementById("drawn-card-container").classList.remove("hidden");
 
-        animateCardFlight(deckEl, drawnCardEl, drawnCard, () => {});
+        animateCardFlight(deckEl, drawnCardEl, drawnCard, () => { });
     }
 
     async function drawFromDiscard() {
@@ -1077,8 +1176,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         // Start both animations
-        animateCardFlight(drawnCardEl, handCardEl, drawnCardToSave, () => {});
-        animateCardFlight(handCardEl, discardPileEl, cardToDiscard, () => {});
+        animateCardFlight(drawnCardEl, handCardEl, drawnCardToSave, () => { });
+        animateCardFlight(handCardEl, discardPileEl, cardToDiscard, () => { });
     }
 
     async function discardDrawnCard() {
@@ -1168,7 +1267,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        animateCardFlight(drawnCardEl, discardPileEl, cardToAnimate, () => {});
+        animateCardFlight(drawnCardEl, discardPileEl, cardToAnimate, () => { });
     }
 
     async function handlePowerClick(targetUid, cardIndex) {
@@ -1297,10 +1396,10 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("ready-continue-btn").onclick = async () => {
                 cardEl.innerHTML = originalHtml;
                 cardEl.className = 'card ' + (originalColor ? originalColor : '');
-                
+
                 actionPrompt.className = "action-prompt";
                 actionPrompt.classList.add("hidden");
-                
+
                 await endTurnAfterPower();
             };
         }
@@ -1678,7 +1777,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const info = document.createElement("div");
                 info.className = "admin-room-info";
-                
+
                 const hostName = room.players && room.host && room.players[room.host] ? room.players[room.host].name : "Unknown";
                 const pCount = room.players ? Object.keys(room.players).length : 0;
                 const pNames = room.players ? Object.values(room.players).map(p => p.name).join(', ') : "None";
